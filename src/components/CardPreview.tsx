@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import type { DotData } from '@/lib/data';
 import { rgba } from '@/lib/colors';
 import CardBackdrop from './CardBackdrop';
@@ -84,8 +84,12 @@ function getContentStyle(theme: string): { padding: string; minHeight: string; n
 }
 
 export default function CardPreview({ dot, onClose, friends = [] }: CardPreviewProps) {
-  const { dot: myDot } = useAuth();
+  const { dot: myDot, isAuthenticated, login } = useAuth();
   const isOwner = !!(myDot && dot && myDot.id === String(dot.id));
+  const isUnclaimed = dot?.claimed === false && !isAuthenticated;
+
+  const [claimEmail, setClaimEmail] = useState('');
+  const [claimStatus, setClaimStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
 
   useEffect(() => {
     if (!dot) return;
@@ -105,6 +109,13 @@ export default function CardPreview({ dot, onClose, friends = [] }: CardPreviewP
   const nameTextShadow = theme === 'neon'
     ? `0 0 20px ${rgba(dot.color, 0.6)}, 0 0 40px ${rgba(dot.color, 0.3)}`
     : '0 2px 30px rgba(0,0,0,0.4)';
+
+  const handleClaim = async () => {
+    if (!claimEmail.trim()) return;
+    setClaimStatus('sending');
+    const result = await login(claimEmail.trim());
+    setClaimStatus(result.success ? 'sent' : 'error');
+  };
 
   return (
     <div
@@ -209,6 +220,55 @@ export default function CardPreview({ dot, onClose, friends = [] }: CardPreviewP
           back to galaxy
         </button>
       </div>
+
+      {/* Claim your dot prompt — shown for unclaimed dots */}
+      {isUnclaimed && (
+        <div className="mt-5 w-[min(380px,88vw)] max-sm:w-[92vw] animate-fadeIn">
+          {claimStatus === 'sent' ? (
+            <div className="text-center text-[11px] text-white/40 font-light tracking-[1px] py-3">
+              check your email for a magic link to claim your dot
+            </div>
+          ) : (
+            <>
+              <div className="text-center text-[11px] text-white/25 font-light tracking-[0.5px] mb-3">
+                claim your dot to edit it, create maps, and connect with friends
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="email"
+                  value={claimEmail}
+                  onChange={(e) => setClaimEmail(e.target.value)}
+                  placeholder="enter your email"
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleClaim(); }}
+                  className="flex-1 py-2.5 px-4 text-xs text-white font-sans outline-none transition-colors duration-300 placeholder:text-[#333] placeholder:font-light"
+                  style={{
+                    background: 'rgba(255,255,255,0.03)',
+                    border: '1px solid rgba(255,255,255,0.06)',
+                    borderRadius: '10px',
+                  }}
+                />
+                <button
+                  onClick={handleClaim}
+                  disabled={claimStatus === 'sending' || !claimEmail.trim()}
+                  className="py-2.5 px-5 text-xs text-white/70 cursor-pointer transition-all duration-300 font-light tracking-[0.5px] border-none hover:text-white disabled:opacity-30 disabled:cursor-default"
+                  style={{
+                    background: 'rgba(255,255,255,0.05)',
+                    borderRadius: '10px',
+                    fontFamily: "'DM Sans', sans-serif",
+                  }}
+                >
+                  {claimStatus === 'sending' ? '...' : 'claim'}
+                </button>
+              </div>
+              {claimStatus === 'error' && (
+                <div className="text-center text-[10px] text-red-400/50 mt-2 font-light">
+                  something went wrong — try again
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
