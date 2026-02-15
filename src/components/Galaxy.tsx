@@ -344,6 +344,7 @@ export default function Galaxy({ refSlug, initialDots, mapMode }: GalaxyProps) {
     const np = new Float32Array(n * 3);
     const nc = new Float32Array(n * 3);
     const ns = new Float32Array(n);
+    const nb = new Float32Array(n);
 
     for (let i = 0; i < n; i++) {
       np[i * 3] = dots[i].px;
@@ -353,12 +354,16 @@ export default function Galaxy({ refSlug, initialDots, mapMode }: GalaxyProps) {
       nc[i * 3] = c.r;
       nc[i * 3 + 1] = c.g;
       nc[i * 3 + 2] = c.b;
-      ns[i] = 3.2 + Math.random() * 2.0;
+      const friendCount = dots[i].friends.length;
+      const connectionScale = Math.min(friendCount / 5, 1.5);
+      ns[i] = 2.5 + connectionScale * 2.0;
+      nb[i] = 0.7 + Math.min(friendCount / 8, 0.6);
     }
 
     geo.setAttribute('position', new THREE.BufferAttribute(np, 3));
     geo.setAttribute('color', new THREE.BufferAttribute(nc, 3));
     geo.setAttribute('size', new THREE.BufferAttribute(ns, 1));
+    geo.setAttribute('brightness', new THREE.BufferAttribute(nb, 1));
 
     sizeBoostRef.current = new Float32Array(n);
 
@@ -549,11 +554,12 @@ export default function Galaxy({ refSlug, initialDots, mapMode }: GalaxyProps) {
 
     sizeBoostRef.current = new Float32Array(dots.length);
 
-    // dot buffers — bigger sizes
+    // dot buffers — sizes scale with connection count
     const N = dots.length;
     const positions = new Float32Array(N * 3);
     const colors = new Float32Array(N * 3);
     const sizes = new Float32Array(N);
+    const brightnessArr = new Float32Array(N);
 
     for (let i = 0; i < N; i++) {
       positions[i * 3] = dots[i].px;
@@ -563,13 +569,17 @@ export default function Galaxy({ refSlug, initialDots, mapMode }: GalaxyProps) {
       colors[i * 3] = c.r;
       colors[i * 3 + 1] = c.g;
       colors[i * 3 + 2] = c.b;
-      sizes[i] = 3.2 + Math.random() * 2.0;
+      const friendCount = dots[i].friends.length;
+      const connectionScale = Math.min(friendCount / 5, 1.5);
+      sizes[i] = 2.5 + connectionScale * 2.0;
+      brightnessArr[i] = 0.7 + Math.min(friendCount / 8, 0.6);
     }
 
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     geo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+    geo.setAttribute('brightness', new THREE.BufferAttribute(brightnessArr, 1));
     geometryRef.current = geo;
 
     const mat = new THREE.ShaderMaterial({
@@ -732,8 +742,10 @@ export default function Galaxy({ refSlug, initialDots, mapMode }: GalaxyProps) {
         posArr[i * 3 + 1] = currentDots[i].py;
         posArr[i * 3 + 2] = currentDots[i].pz;
 
-        // size: base + pulse + ripple boost + galaxy pulse
-        const baseSize = 3.2 + Math.sin(t * 0.7 + i * 1.1) * 0.7;
+        // size: connection-scaled base + pulse + ripple boost + galaxy pulse
+        const friendCount = currentDots[i].friends.length;
+        const connectionScale = Math.min(friendCount / 5, 1.5);
+        const baseSize = (2.5 + connectionScale * 2.0) + Math.sin(t * 0.7 + i * 1.1) * 0.7;
         const boost = sizeBoost.length > i ? sizeBoost[i] : 0;
         const gPulse = galaxyPulseRef.current * 2.0;
         sizeArr[i] = baseSize + boost + gPulse;
@@ -777,6 +789,7 @@ export default function Galaxy({ refSlug, initialDots, mapMode }: GalaxyProps) {
       geo.attributes.position.needsUpdate = true;
       geo.attributes.size.needsUpdate = true;
       geo.attributes.color.needsUpdate = true;
+      if (geo.attributes.brightness) geo.attributes.brightness.needsUpdate = true;
 
       // Update halo ring position
       const myIdx = myDotIdxRef.current;

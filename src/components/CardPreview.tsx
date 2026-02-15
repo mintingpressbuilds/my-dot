@@ -84,7 +84,7 @@ function getContentStyle(theme: string): { padding: string; minHeight: string; n
 }
 
 export default function CardPreview({ dot, onClose, friends = [] }: CardPreviewProps) {
-  const { dot: myDot, isAuthenticated, login } = useAuth();
+  const { dot: myDot, isAuthenticated } = useAuth();
   const isOwner = !!(myDot && dot && myDot.id === String(dot.id));
   const isUnclaimed = dot?.claimed === false && !isAuthenticated;
 
@@ -113,8 +113,26 @@ export default function CardPreview({ dot, onClose, friends = [] }: CardPreviewP
   const handleClaim = async () => {
     if (!claimEmail.trim()) return;
     setClaimStatus('sending');
-    const result = await login(claimEmail.trim());
-    setClaimStatus(result.success ? 'sent' : 'error');
+    try {
+      const res = await fetch('/api/auth/magic', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: claimEmail.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setClaimStatus('error');
+        return;
+      }
+      // If server returned a direct verify URL (no email provider), redirect to claim
+      if (data.verifyUrl) {
+        window.location.href = data.verifyUrl;
+        return;
+      }
+      setClaimStatus('sent');
+    } catch {
+      setClaimStatus('error');
+    }
   };
 
   return (
