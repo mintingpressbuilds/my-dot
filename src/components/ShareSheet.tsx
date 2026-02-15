@@ -122,7 +122,8 @@ export default function ShareSheet({ open, onClose, dot }: ShareSheetProps) {
   if (!open) return null;
 
   const btnStyle = {
-    padding: '12px 20px',
+    padding: '14px 20px',
+    minHeight: '48px',
     borderRadius: '14px',
     background: 'rgba(255,255,255,0.04)',
     border: '1px solid rgba(255,255,255,0.06)',
