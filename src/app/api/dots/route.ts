@@ -36,7 +36,7 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { name, color, line, vibe, link } = body;
+    const { name, color, line, vibe, link, theme } = body;
 
     if (!name || typeof name !== 'string' || name.length > 24) {
       return NextResponse.json({ message: 'Name required (max 24 chars)' }, { status: 400 });
@@ -79,6 +79,7 @@ export async function POST(req: Request) {
         color,
         line: (line || '').trim().slice(0, 80),
         vibe: vibe || 'serene',
+        theme: theme || 'default',
         link: link?.trim() || null,
         posX,
         posY,

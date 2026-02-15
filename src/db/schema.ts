@@ -18,6 +18,7 @@ export const dots = pgTable('dots', {
   color: text('color').notNull(),
   line: text('line').notNull().default(''),
   vibe: text('vibe').notNull().default('serene'),
+  theme: text('theme').notNull().default('default'),
   link: text('link'),
   posX: real('pos_x').notNull().default(0),
   posY: real('pos_y').notNull().default(0),

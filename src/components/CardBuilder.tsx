@@ -1,10 +1,19 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { PALETTE, type Vibe } from '@/lib/colors';
+import { PALETTE, CARD_THEMES, type Vibe, type CardTheme } from '@/lib/colors';
 import type { DotData } from '@/lib/data';
 import ColorPicker from './ColorPicker';
 import VibePicker from './VibePicker';
+
+const THEME_LABELS: Record<CardTheme, string> = {
+  default: 'default',
+  glass: 'glass',
+  neon: 'neon',
+  minimal: 'minimal',
+  gradient: 'gradient',
+  noise: 'noise',
+};
 
 interface CardBuilderProps {
   open: boolean;
@@ -17,9 +26,9 @@ export default function CardBuilder({ open, onClose, onSubmit }: CardBuilderProp
   const [color, setColor] = useState<string>(PALETTE[4]);
   const [line, setLine] = useState('');
   const [vibe, setVibe] = useState<Vibe>('serene');
+  const [theme, setTheme] = useState<CardTheme>('default');
   const [link, setLink] = useState('');
 
-  // escape to close
   useEffect(() => {
     if (!open) return;
     const handleKey = (e: KeyboardEvent) => {
@@ -35,15 +44,16 @@ export default function CardBuilder({ open, onClose, onSubmit }: CardBuilderProp
       color,
       line: line.trim() || 'just got here',
       vibe,
+      theme,
       link: link.trim(),
     });
-    // reset form
     setName('');
     setLine('');
     setLink('');
     setColor(PALETTE[4]);
     setVibe('serene');
-  }, [name, color, line, vibe, link, onSubmit]);
+    setTheme('default');
+  }, [name, color, line, vibe, theme, link, onSubmit]);
 
   if (!open) return null;
 
@@ -67,7 +77,6 @@ export default function CardBuilder({ open, onClose, onSubmit }: CardBuilderProp
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* close button */}
         <button
           onClick={onClose}
           className="absolute top-4 right-5 text-lg text-[#55556a] hover:text-[#d0d0dd] bg-transparent border-none cursor-pointer font-sans"
@@ -75,7 +84,6 @@ export default function CardBuilder({ open, onClose, onSubmit }: CardBuilderProp
           ×
         </button>
 
-        {/* title */}
         <div className="font-serif text-[26px] italic text-white mb-1.5 tracking-tight">
           make your dot.
         </div>
@@ -143,6 +151,37 @@ export default function CardBuilder({ open, onClose, onSubmit }: CardBuilderProp
           <VibePicker selected={vibe} onChange={setVibe} />
         </div>
 
+        {/* card theme */}
+        <div className="mb-5">
+          <label className="text-[10px] max-sm:text-[11px] tracking-[3px] uppercase text-[#55556a] mb-2 block font-normal">
+            card theme
+          </label>
+          <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+            {CARD_THEMES.map((t) => (
+              <div
+                key={t}
+                onClick={() => setTheme(t)}
+                className="flex-shrink-0 cursor-pointer text-center transition-all duration-200"
+                style={{ opacity: theme === t ? 1 : 0.5, width: 64 }}
+              >
+                <div
+                  className="mb-1.5 transition-all duration-200"
+                  style={{
+                    width: 64,
+                    height: 80,
+                    borderRadius: t === 'minimal' ? 0 : 8,
+                    border: theme === t ? '1px solid rgba(255,255,255,0.3)' : '1px solid rgba(255,255,255,0.06)',
+                    ...getThemePreviewStyle(t, color),
+                  }}
+                />
+                <span className="text-[9px] tracking-[1px] text-[#55556a]">
+                  {THEME_LABELS[t]}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/* link */}
         <div className="mb-5">
           <label className="text-[10px] max-sm:text-[11px] tracking-[3px] uppercase text-[#55556a] mb-2 block font-normal">
@@ -164,7 +203,6 @@ export default function CardBuilder({ open, onClose, onSubmit }: CardBuilderProp
           />
         </div>
 
-        {/* submit */}
         <button
           onClick={handleSubmit}
           className="w-full py-3.5 border-none text-[13px] font-normal tracking-[1px] text-white cursor-pointer transition-all duration-300 mt-2 hover:brightness-[1.15] hover:-translate-y-px"
@@ -179,4 +217,21 @@ export default function CardBuilder({ open, onClose, onSubmit }: CardBuilderProp
       </div>
     </div>
   );
+}
+
+function getThemePreviewStyle(theme: CardTheme, color: string): React.CSSProperties {
+  switch (theme) {
+    case 'glass':
+      return { background: 'rgba(255,255,255,0.03)', backdropFilter: 'blur(10px)' };
+    case 'neon':
+      return { background: '#050508', boxShadow: `0 0 8px ${color}40, inset 0 0 8px ${color}15`, borderColor: color };
+    case 'minimal':
+      return { background: '#000' };
+    case 'gradient':
+      return { background: `linear-gradient(145deg, ${color} 0%, #0a0a12 100%)` };
+    case 'noise':
+      return { background: '#0a0a10', backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 200 200\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.65\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\' opacity=\'0.15\'/%3E%3C/svg%3E")' };
+    default:
+      return { background: `radial-gradient(circle at 30% 30%, ${color}20, #0a0a12 70%)` };
+  }
 }

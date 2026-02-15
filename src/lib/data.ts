@@ -8,6 +8,7 @@ export interface DotData {
   line: string;
   vibe: Vibe;
   link: string;
+  theme?: string;
   px: number;
   py: number;
   pz: number;
@@ -19,6 +20,9 @@ export interface DotData {
   vz: number;
   friends: number[];
   grabbed: boolean;
+  _savedHx?: number;
+  _savedHy?: number;
+  _savedHz?: number;
 }
 
 const NAMES = [
