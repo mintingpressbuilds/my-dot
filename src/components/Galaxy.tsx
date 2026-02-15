@@ -358,6 +358,7 @@ export default function Galaxy({ refSlug }: GalaxyProps) {
       vibe: dotData.vibe,
       link: dotData.link,
       theme: dotData.theme || 'default',
+      claimed: false,
       px: 0, py: 0, pz: 0,
       hx: r * Math.sin(phi) * Math.cos(theta),
       hy: r * Math.sin(phi) * Math.sin(theta),
@@ -383,6 +384,29 @@ export default function Galaxy({ refSlug }: GalaxyProps) {
     const newIdx = dots.length - 1;
     myDotIdxRef.current = newIdx;
     setMyDotIdx(newIdx);
+
+    // Persist to API (fire and forget — dot already in galaxy locally)
+    fetch('/api/dots', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: dotData.name,
+        color: dotData.color,
+        line: dotData.line,
+        vibe: dotData.vibe,
+        link: dotData.link,
+        theme: dotData.theme || 'default',
+      }),
+    })
+      .then(res => res.json())
+      .then(saved => {
+        if (saved?.slug) {
+          newDot.slug = saved.slug;
+          newDot.claimed = !!saved.ownerId;
+          setPreviewDot(prev => prev ? { ...prev, slug: saved.slug, claimed: !!saved.ownerId } : null);
+        }
+      })
+      .catch(() => {});
 
     // Create halo ring in the scene
     const scene = sceneRef.current;

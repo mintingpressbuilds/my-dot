@@ -3,12 +3,14 @@ import type { Vibe } from './colors';
 
 export interface DotData {
   id: number;
+  slug?: string;
   name: string;
   color: string;
   line: string;
   vibe: Vibe;
   link: string;
   theme?: string;
+  claimed?: boolean;
   px: number;
   py: number;
   pz: number;

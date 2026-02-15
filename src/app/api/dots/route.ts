@@ -16,23 +16,18 @@ function slugify(name: string): string {
 export async function POST(req: Request) {
   try {
     const userId = await getAuthUser();
-    if (!userId) {
-      return NextResponse.json({ message: 'Authentication required' }, { status: 401 });
-    }
 
-    // check if user already has a dot
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
+    // If authenticated, check if user already has a dot
+    if (userId) {
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
 
-    if (!user) {
-      return NextResponse.json({ message: 'User not found' }, { status: 404 });
-    }
-
-    if (user.dotId) {
-      return NextResponse.json({ message: 'You already have a dot' }, { status: 409 });
+      if (user?.dotId) {
+        return NextResponse.json({ message: 'You already have a dot' }, { status: 409 });
+      }
     }
 
     const body = await req.json();
@@ -70,6 +65,9 @@ export async function POST(req: Request) {
 
     const dotId = nanoid(12);
 
+    // If authenticated: set ownerId. If not: generate sessionToken.
+    const sessionToken = userId ? null : nanoid(32);
+
     const [dot] = await db
       .insert(dots)
       .values({
@@ -84,17 +82,34 @@ export async function POST(req: Request) {
         posX,
         posY,
         posZ,
-        ownerId: userId,
+        ownerId: userId || null,
+        sessionToken,
       })
       .returning();
 
-    // update user with dotId
-    await db
-      .update(users)
-      .set({ dotId })
-      .where(eq(users.id, userId));
+    // If authenticated, update user with dotId
+    if (userId) {
+      await db
+        .update(users)
+        .set({ dotId })
+        .where(eq(users.id, userId));
+    }
 
-    return NextResponse.json(dot, { status: 201 });
+    // Build response
+    const response = NextResponse.json(dot, { status: 201 });
+
+    // If unclaimed, set sessionToken cookie
+    if (sessionToken) {
+      response.cookies.set('dot_session', sessionToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 60 * 60 * 24 * 30, // 30 days
+        path: '/',
+      });
+    }
+
+    return response;
   } catch {
     return NextResponse.json({ message: 'Internal server error' }, { status: 500 });
   }

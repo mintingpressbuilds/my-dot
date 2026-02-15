@@ -24,13 +24,15 @@ export const dots = pgTable('dots', {
   posY: real('pos_y').notNull().default(0),
   posZ: real('pos_z').notNull().default(0),
   sparkCount: integer('spark_count').notNull().default(0),
-  ownerId: text('owner_id').notNull().references(() => users.id),
+  ownerId: text('owner_id').references(() => users.id),
+  sessionToken: text('session_token'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (t) => [
   index('dots_slug_idx').on(t.slug),
   index('dots_owner_id_idx').on(t.ownerId),
   index('dots_created_at_idx').on(t.createdAt),
+  index('dots_session_token_idx').on(t.sessionToken),
 ]);
 
 // connections

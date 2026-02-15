@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server';
 import { nanoid } from 'nanoid';
 import { eq, and, isNull, gt } from 'drizzle-orm';
 import { db } from '@/db';
-import { magicLinks, users } from '@/db/schema';
+import { magicLinks, users, dots } from '@/db/schema';
 import { signJwt } from '@/middleware/auth';
+import { cookies } from 'next/headers';
 
 export async function GET(req: Request) {
   try {
@@ -55,6 +56,30 @@ export async function GET(req: Request) {
         .returning();
     }
 
+    // Auto-claim: if there's a dot_session cookie, claim that dot
+    const cookieStore = await cookies();
+    const dotSession = cookieStore.get('dot_session')?.value;
+
+    if (dotSession && !user.dotId) {
+      const [unclaimedDot] = await db
+        .select()
+        .from(dots)
+        .where(eq(dots.sessionToken, dotSession))
+        .limit(1);
+
+      if (unclaimedDot && !unclaimedDot.ownerId) {
+        await db
+          .update(dots)
+          .set({ ownerId: user.id, sessionToken: null, updatedAt: new Date() })
+          .where(eq(dots.id, unclaimedDot.id));
+
+        await db
+          .update(users)
+          .set({ dotId: unclaimedDot.id })
+          .where(eq(users.id, user.id));
+      }
+    }
+
     // generate JWT and set cookie
     const jwt = signJwt(user.id);
     const baseUrl = process.env.NEXT_PUBLIC_URL || 'http://localhost:3000';
@@ -67,6 +92,17 @@ export async function GET(req: Request) {
       maxAge: 60 * 60 * 24, // 24h
       path: '/',
     });
+
+    // Clear dot_session cookie after claiming
+    if (dotSession) {
+      response.cookies.set('dot_session', '', {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 0,
+        path: '/',
+      });
+    }
 
     return response;
   } catch {
