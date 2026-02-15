@@ -1,6 +1,6 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 import { nanoid } from 'nanoid';
-import { eq } from 'drizzle-orm';
+import { eq, ilike } from 'drizzle-orm';
 import { db } from '@/db';
 import { dots, users } from '@/db/schema';
 import { getAuthUser } from '@/middleware/auth';
@@ -115,8 +115,26 @@ export async function POST(req: Request) {
   }
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const search = req.nextUrl.searchParams.get('search');
+
+    if (search && search.length >= 2) {
+      const results = await db
+        .select({
+          id: dots.id,
+          slug: dots.slug,
+          name: dots.name,
+          color: dots.color,
+          line: dots.line,
+          vibe: dots.vibe,
+        })
+        .from(dots)
+        .where(ilike(dots.name, `%${search}%`))
+        .limit(10);
+      return NextResponse.json(results);
+    }
+
     const allDots = await db.select().from(dots);
     return NextResponse.json(allDots);
   } catch {
