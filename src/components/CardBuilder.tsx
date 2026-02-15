@@ -57,12 +57,12 @@ export default function CardBuilder({ open, onClose, onSubmit }: CardBuilderProp
       onClick={onClose}
     >
       <div
-        className="w-[min(420px,90vw)] max-h-[90vh] overflow-y-auto relative animate-slideUp"
+        className="w-[min(420px,90vw)] max-h-[90vh] overflow-y-auto relative animate-slideUp max-sm:w-[94vw]"
         style={{
           background: '#0a0a10',
           border: '1px solid #1a1a24',
           borderRadius: '24px',
-          padding: '40px 32px',
+          padding: 'clamp(24px, 5vw, 40px) clamp(20px, 4vw, 32px)',
           scrollbarWidth: 'none',
         }}
         onClick={(e) => e.stopPropagation()}
@@ -85,7 +85,7 @@ export default function CardBuilder({ open, onClose, onSubmit }: CardBuilderProp
 
         {/* name */}
         <div className="mb-5">
-          <label className="text-[9px] tracking-[3px] uppercase text-[#55556a] mb-2 block font-normal">
+          <label className="text-[10px] max-sm:text-[11px] tracking-[3px] uppercase text-[#55556a] mb-2 block font-normal">
             name
           </label>
           <input
@@ -107,7 +107,7 @@ export default function CardBuilder({ open, onClose, onSubmit }: CardBuilderProp
 
         {/* color */}
         <div className="mb-5">
-          <label className="text-[9px] tracking-[3px] uppercase text-[#55556a] mb-2 block font-normal">
+          <label className="text-[10px] max-sm:text-[11px] tracking-[3px] uppercase text-[#55556a] mb-2 block font-normal">
             color
           </label>
           <ColorPicker selected={color} onChange={setColor} />
@@ -115,7 +115,7 @@ export default function CardBuilder({ open, onClose, onSubmit }: CardBuilderProp
 
         {/* line */}
         <div className="mb-5">
-          <label className="text-[9px] tracking-[3px] uppercase text-[#55556a] mb-2 block font-normal">
+          <label className="text-[10px] max-sm:text-[11px] tracking-[3px] uppercase text-[#55556a] mb-2 block font-normal">
             your line
           </label>
           <input
@@ -137,7 +137,7 @@ export default function CardBuilder({ open, onClose, onSubmit }: CardBuilderProp
 
         {/* vibe */}
         <div className="mb-5">
-          <label className="text-[9px] tracking-[3px] uppercase text-[#55556a] mb-2 block font-normal">
+          <label className="text-[10px] max-sm:text-[11px] tracking-[3px] uppercase text-[#55556a] mb-2 block font-normal">
             vibe
           </label>
           <VibePicker selected={vibe} onChange={setVibe} />
@@ -145,7 +145,7 @@ export default function CardBuilder({ open, onClose, onSubmit }: CardBuilderProp
 
         {/* link */}
         <div className="mb-5">
-          <label className="text-[9px] tracking-[3px] uppercase text-[#55556a] mb-2 block font-normal">
+          <label className="text-[10px] max-sm:text-[11px] tracking-[3px] uppercase text-[#55556a] mb-2 block font-normal">
             link (optional)
           </label>
           <input

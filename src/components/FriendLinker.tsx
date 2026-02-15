@@ -42,7 +42,8 @@ export default function FriendLinker({ targetSlug, targetDotId, isAlreadyConnect
       disabled={connected || loading}
       className="text-[11px] tracking-[1px] font-light cursor-pointer transition-all duration-300"
       style={{
-        padding: '8px 16px',
+        padding: '12px 20px',
+        minHeight: '44px',
         borderRadius: '20px',
         background: connected ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.03)',
         border: connected ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(255,255,255,0.06)',

@@ -58,8 +58,8 @@ export default function SparkButton({ dotId, dotColor, sparkCount, isOwner = fal
         disabled={sparked || loading}
         className="relative transition-all duration-300"
         style={{
-          width: '32px',
-          height: '32px',
+          width: '44px',
+          height: '44px',
           borderRadius: '50%',
           background: sparked ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.03)',
           border: '1px solid rgba(255,255,255,0.06)',

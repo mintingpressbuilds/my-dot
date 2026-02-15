@@ -14,9 +14,9 @@ export default function VibePicker({ selected, onChange }: VibePickerProps) {
         <div
           key={v}
           onClick={() => onChange(v)}
-          className="cursor-pointer transition-all duration-200 text-[11px] font-light"
+          className="cursor-pointer transition-all duration-200 text-[11px] font-light active:scale-95"
           style={{
-            padding: '7px 14px',
+            padding: '11px 16px',
             borderRadius: '18px',
             background: selected === v ? '#111118' : '#030305',
             border: selected === v ? '1px solid rgba(255,255,255,0.15)' : '1px solid #1a1a24',
