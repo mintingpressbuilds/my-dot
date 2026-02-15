@@ -41,8 +41,8 @@ export const ringFragmentShader = `
   void main() {
     float d = length(gl_PointCoord - vec2(0.5));
     if (d > 0.5) discard;
-    float ring = smoothstep(0.30, 0.36, d) * (1.0 - smoothstep(0.40, 0.50, d));
+    float ring = smoothstep(0.28, 0.34, d) * (1.0 - smoothstep(0.38, 0.50, d));
     if (ring < 0.01) discard;
-    gl_FragColor = vec4(vC, ring * 0.35);
+    gl_FragColor = vec4(vC, ring * 0.5);
   }
 `;

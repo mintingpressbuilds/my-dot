@@ -275,7 +275,8 @@ export default function Galaxy({ refSlug }: GalaxyProps) {
     // Trigger pulse (3 seconds) and ripple
     myDotPulseEndRef.current = clockRef.current.getElapsedTime() + 3;
     triggerRipple(idx);
-  }, [physics.dotsRef, cam.targetZoomRef, cam.autoRotateRef, triggerRipple]);
+    showMode('your dot', 2000);
+  }, [physics.dotsRef, cam.targetZoomRef, cam.autoRotateRef, triggerRipple, showMode]);
 
   const toggleColorMode = useCallback(() => {
     const dots = physics.dotsRef.current;
@@ -342,6 +343,7 @@ export default function Galaxy({ refSlug }: GalaxyProps) {
 
   const handleCreateDot = useCallback((dotData: { name: string; color: string; line: string; vibe: Vibe; link: string; theme?: string }) => {
     setBuilderOpen(false);
+    setSelectedDot(null);
 
     const dots = physics.dotsRef.current;
     const theta = Math.random() * Math.PI * 2;
@@ -393,7 +395,7 @@ export default function Galaxy({ refSlug }: GalaxyProps) {
       ringGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([newDot.px, newDot.py, newDot.pz]), 3));
       const c = new THREE.Color(newDot.color);
       ringGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array([c.r, c.g, c.b]), 3));
-      ringGeo.setAttribute('size', new THREE.BufferAttribute(new Float32Array([8.0]), 1));
+      ringGeo.setAttribute('size', new THREE.BufferAttribute(new Float32Array([10.0]), 1));
       const ringMat = new THREE.ShaderMaterial({
         vertexShader: ringVertexShader,
         fragmentShader: ringFragmentShader,
@@ -1080,22 +1082,22 @@ export default function Galaxy({ refSlug }: GalaxyProps) {
         <button
           onClick={flyToMyDot}
           title="find my dot"
-          className="fixed z-20 cursor-pointer transition-opacity duration-300 active:scale-90 bottom-5 left-[56px] sm:bottom-10 sm:left-[70px]"
+          className="fixed z-20 cursor-pointer transition-opacity duration-300 active:scale-90 bottom-[60px] left-4 sm:bottom-[88px] sm:left-7"
           style={{
             width: '44px',
             height: '44px',
             background: 'none',
             border: 'none',
-            opacity: 0.25,
+            opacity: 0.35,
             padding: 0,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.6'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.25'; }}
+          onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.7'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.35'; }}
         >
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#55556a" strokeWidth="1.5" strokeLinecap="round">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#888" strokeWidth="1.5" strokeLinecap="round">
             <circle cx="12" cy="12" r="8" />
             <circle cx="12" cy="12" r="2.5" />
             <line x1="12" y1="2" x2="12" y2="5" />
@@ -1151,23 +1153,21 @@ export default function Galaxy({ refSlug }: GalaxyProps) {
       }} />
 
       {/* "me" label — projected from 3D, visible when zoomed out */}
-      {myDotIdx >= 0 && (
-        <div
-          ref={meLabelRef}
-          className="fixed z-[15] pointer-events-none"
-          style={{
-            fontSize: '8px',
-            letterSpacing: '2px',
-            textTransform: 'uppercase',
-            color: 'rgba(255,255,255,0.3)',
-            fontWeight: 300,
-            transform: 'translateX(-50%)',
-            display: 'none',
-          }}
-        >
-          me
-        </div>
-      )}
+      <div
+        ref={meLabelRef}
+        className="fixed z-[15] pointer-events-none"
+        style={{
+          fontSize: '8px',
+          letterSpacing: '2px',
+          textTransform: 'uppercase',
+          color: 'rgba(255,255,255,0.35)',
+          fontWeight: 300,
+          transform: 'translateX(-50%)',
+          display: 'none',
+        }}
+      >
+        me
+      </div>
     </>
   );
 }
