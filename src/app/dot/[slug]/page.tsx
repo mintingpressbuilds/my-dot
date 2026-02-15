@@ -1,7 +1,7 @@
 import { Metadata } from 'next';
-import { eq } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { db } from '@/db';
-import { dots, connections } from '@/db/schema';
+import { dots, connections, maps, mapDots, mapItems } from '@/db/schema';
 import { notFound } from 'next/navigation';
 import DotPageClient from './DotPageClient';
 
@@ -89,6 +89,52 @@ export default async function DotPage({ params }: Props) {
   // check if viewer is connected (will be refined client-side)
   const isConnected = false;
 
+  // get user's public maps (if dot has an owner)
+  let userMaps: {
+    id: string;
+    slug: string;
+    name: string;
+    color: string;
+    dotCount: number;
+    itemCount: number;
+    thumbnailItems: { color: string; posX: number; posY: number }[];
+  }[] = [];
+
+  if (dot.ownerId) {
+    const ownerMaps = await db
+      .select()
+      .from(maps)
+      .where(and(eq(maps.ownerId, dot.ownerId), eq(maps.visibility, 'public')))
+      .orderBy(maps.createdAt);
+
+    userMaps = await Promise.all(
+      ownerMaps.map(async (map) => {
+        const [dotCount] = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(mapDots)
+          .where(eq(mapDots.mapId, map.id));
+        const [itemCount] = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(mapItems)
+          .where(eq(mapItems.mapId, map.id));
+        const items = await db
+          .select({ color: mapItems.color, posX: mapItems.posX, posY: mapItems.posY })
+          .from(mapItems)
+          .where(eq(mapItems.mapId, map.id));
+
+        return {
+          id: map.id,
+          slug: map.slug,
+          name: map.name,
+          color: map.color,
+          dotCount: Number(dotCount?.count ?? 0),
+          itemCount: Number(itemCount?.count ?? 0),
+          thumbnailItems: items,
+        };
+      })
+    );
+  }
+
   const dotData = {
     id: dot.id,
     slug: dot.slug,
@@ -99,8 +145,9 @@ export default async function DotPage({ params }: Props) {
     theme: dot.theme,
     link: dot.link,
     sparkCount: dot.sparkCount,
+    ownerId: dot.ownerId,
     createdAt: dot.createdAt.toISOString(),
   };
 
-  return <DotPageClient dot={dotData} friends={friends} isConnected={isConnected} />;
+  return <DotPageClient dot={dotData} friends={friends} isConnected={isConnected} maps={userMaps} />;
 }

@@ -8,6 +8,7 @@ import MiniConstellation from '@/components/MiniConstellation';
 import SparkButton from '@/components/SparkButton';
 import FriendLinker from '@/components/FriendLinker';
 import ShareSheet from '@/components/ShareSheet';
+import MyMapsRow from '@/components/MyMapsRow';
 import { useAuth } from '@/hooks/useAuth';
 
 interface FriendDot {
@@ -28,13 +29,25 @@ interface DotData {
   theme?: string;
   link: string | null;
   sparkCount: number;
+  ownerId?: string | null;
   createdAt: string;
+}
+
+interface MapData {
+  id: string;
+  slug: string;
+  name: string;
+  color: string;
+  dotCount: number;
+  itemCount: number;
+  thumbnailItems: { color: string; posX: number; posY: number }[];
 }
 
 interface DotPageClientProps {
   dot: DotData;
   friends: FriendDot[];
   isConnected: boolean;
+  maps?: MapData[];
 }
 
 function formatSince(dateStr: string): string {
@@ -104,7 +117,7 @@ function getContentStyle(theme: string): { padding: string; minHeight: string; n
   }
 }
 
-export default function DotPageClient({ dot, friends, isConnected }: DotPageClientProps) {
+export default function DotPageClient({ dot, friends, isConnected, maps = [] }: DotPageClientProps) {
   const router = useRouter();
   const { dot: myDot } = useAuth();
   const isOwner = myDot?.id === dot.id;
@@ -222,6 +235,11 @@ export default function DotPageClient({ dot, friends, isConnected }: DotPageClie
             )}
           </div>
         </div>
+
+        {/* My maps */}
+        {(maps.length > 0 || isOwner) && !isMinimal && (
+          <MyMapsRow maps={maps} isOwner={isOwner} />
+        )}
 
         {/* actions below card */}
         <div className="flex flex-col items-center gap-3 mt-6">
