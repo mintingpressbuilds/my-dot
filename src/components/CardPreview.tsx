@@ -3,14 +3,28 @@
 import { useEffect } from 'react';
 import type { DotData } from '@/lib/data';
 import CardBackdrop from './CardBackdrop';
+import MiniConstellation from './MiniConstellation';
+import SparkButton from './SparkButton';
 import { exportDotHtml } from './ExportEngine';
+import { useAuth } from '@/hooks/useAuth';
+
+interface FriendDot {
+  id: string;
+  slug: string;
+  name: string;
+  color: string;
+  mutual?: boolean;
+}
 
 interface CardPreviewProps {
   dot: DotData | null;
   onClose: () => void;
+  friends?: FriendDot[];
 }
 
-export default function CardPreview({ dot, onClose }: CardPreviewProps) {
+export default function CardPreview({ dot, onClose, friends = [] }: CardPreviewProps) {
+  const { dot: myDot } = useAuth();
+  const isOwner = !!(myDot && dot && myDot.id === String(dot.id));
   // escape to close
   useEffect(() => {
     if (!dot) return;
@@ -67,6 +81,18 @@ export default function CardPreview({ dot, onClose }: CardPreviewProps) {
               {dot.link.replace(/https?:\/\//, '')}
             </a>
           )}
+          {/* mini constellation */}
+          {friends.length > 0 && (
+            <div className="mt-4">
+              <MiniConstellation friends={friends} centerColor={dot.color} />
+            </div>
+          )}
+
+          {/* spark button + count (owner only) */}
+          <div className="mt-3">
+            <SparkButton dotId={String(dot.id)} dotColor={dot.color} isOwner={isOwner} />
+          </div>
+
           <div className="flex justify-between mt-5 pt-3.5 border-t border-white/5">
             <div className="text-[9px] tracking-[2px] uppercase text-white/15 font-light">
               {dot.vibe}
