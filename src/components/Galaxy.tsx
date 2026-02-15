@@ -9,7 +9,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass';
 // @ts-ignore
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass';
 import { generateDots, type DotData } from '@/lib/data';
-import { dotVertexShader, dotFragmentShader } from '@/lib/shaders';
+import { dotVertexShader, dotFragmentShader, ringVertexShader, ringFragmentShader } from '@/lib/shaders';
 import { usePhysics } from '@/hooks/usePhysics';
 import { useCamera } from '@/hooks/useCamera';
 import { hexToHue } from '@/lib/colors';
@@ -78,6 +78,12 @@ export default function Galaxy({ refSlug }: GalaxyProps) {
   // shake
   const lastShakeTimeRef = useRef(0);
 
+  // my dot tracking
+  const myDotIdxRef = useRef(-1);
+  const myDotPulseEndRef = useRef(0);
+  const ringPointsRef = useRef<THREE.Points | null>(null);
+  const meLabelRef = useRef<HTMLDivElement>(null);
+
   const [dotCount, setDotCount] = useState(0);
   const [tooltip, setTooltip] = useState<{ x: number; y: number; name: string; line: string; color: string } | null>(null);
   const [selectedDot, setSelectedDot] = useState<DotData | null>(null);
@@ -85,6 +91,7 @@ export default function Galaxy({ refSlug }: GalaxyProps) {
   const [previewDot, setPreviewDot] = useState<DotData | null>(null);
   const [colorMode, setColorMode] = useState(false);
   const [modeBadge, setModeBadge] = useState<string | null>(null);
+  const [myDotIdx, setMyDotIdx] = useState(-1);
   const modeBadgeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const physics = usePhysics();
@@ -250,6 +257,26 @@ export default function Galaxy({ refSlug }: GalaxyProps) {
     setModeBadge(null);
   }, [cam.targetZoomRef]);
 
+  const flyToMyDot = useCallback(() => {
+    const idx = myDotIdxRef.current;
+    if (idx < 0) return;
+    const dot = physics.dotsRef.current[idx];
+    if (!dot) return;
+
+    // Fly camera to dot
+    orbitFromRef.current.copy(orbitCenterRef.current);
+    orbitToRef.current.set(dot.px, dot.py, dot.pz);
+    orbitTransitionRef.current = 0;
+    orbitLockedRef.current = true;
+    orbitDotIdxRef.current = idx;
+    cam.targetZoomRef.current = 50;
+    cam.autoRotateRef.current = false;
+
+    // Trigger pulse (3 seconds) and ripple
+    myDotPulseEndRef.current = clockRef.current.getElapsedTime() + 3;
+    triggerRipple(idx);
+  }, [physics.dotsRef, cam.targetZoomRef, cam.autoRotateRef, triggerRipple]);
+
   const toggleColorMode = useCallback(() => {
     const dots = physics.dotsRef.current;
     const newMode = !colorModeActiveRef.current;
@@ -349,6 +376,35 @@ export default function Galaxy({ refSlug }: GalaxyProps) {
     setPreviewDot(newDot);
     triggerGalaxyPulse();
     showMode('new dot', 1500);
+
+    // Track as user's dot
+    const newIdx = dots.length - 1;
+    myDotIdxRef.current = newIdx;
+    setMyDotIdx(newIdx);
+
+    // Create halo ring in the scene
+    const scene = sceneRef.current;
+    if (scene) {
+      if (ringPointsRef.current) {
+        scene.remove(ringPointsRef.current);
+        ringPointsRef.current.geometry.dispose();
+      }
+      const ringGeo = new THREE.BufferGeometry();
+      ringGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([newDot.px, newDot.py, newDot.pz]), 3));
+      const c = new THREE.Color(newDot.color);
+      ringGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array([c.r, c.g, c.b]), 3));
+      ringGeo.setAttribute('size', new THREE.BufferAttribute(new Float32Array([8.0]), 1));
+      const ringMat = new THREE.ShaderMaterial({
+        vertexShader: ringVertexShader,
+        fragmentShader: ringFragmentShader,
+        vertexColors: true,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+      });
+      ringPointsRef.current = new THREE.Points(ringGeo, ringMat);
+      scene.add(ringPointsRef.current);
+    }
   }, [physics.dotsRef, rebuildGeometry, triggerGalaxyPulse, showMode]);
 
   // initialize scene
@@ -608,6 +664,15 @@ export default function Galaxy({ refSlug }: GalaxyProps) {
         if (i === refIndexRef.current) sizeArr[i] = 4.0 + Math.sin(t * 2.0) * 1.5;
         if (i === grabIndexRef.current) sizeArr[i] = 6.0;
 
+        // My dot: pulse after creation + permanently slightly larger
+        if (i === myDotIdxRef.current) {
+          if (t < myDotPulseEndRef.current) {
+            sizeArr[i] = 6.0 + Math.sin(t * 4) * 1.5;
+          } else {
+            sizeArr[i] += 0.5;
+          }
+        }
+
         // orbit mode: dim non-friends
         if (orbitLockedRef.current && orbitDotIdxRef.current >= 0) {
           const orbitDot = currentDots[orbitDotIdxRef.current];
@@ -635,6 +700,32 @@ export default function Galaxy({ refSlug }: GalaxyProps) {
       geo.attributes.position.needsUpdate = true;
       geo.attributes.size.needsUpdate = true;
       geo.attributes.color.needsUpdate = true;
+
+      // Update halo ring position
+      const myIdx = myDotIdxRef.current;
+      if (ringPointsRef.current && myIdx >= 0 && myIdx < currentDots.length) {
+        const ringPosArr = ringPointsRef.current.geometry.attributes.position.array as Float32Array;
+        ringPosArr[0] = currentDots[myIdx].px;
+        ringPosArr[1] = currentDots[myIdx].py;
+        ringPosArr[2] = currentDots[myIdx].pz;
+        ringPointsRef.current.geometry.attributes.position.needsUpdate = true;
+      }
+
+      // Update "me" label position (3D → screen projection)
+      if (meLabelRef.current && myIdx >= 0 && myIdx < currentDots.length) {
+        const pos3 = new THREE.Vector3(
+          currentDots[myIdx].px,
+          currentDots[myIdx].py,
+          currentDots[myIdx].pz,
+        );
+        pos3.project(camera);
+        const sx = (pos3.x * 0.5 + 0.5) * window.innerWidth;
+        const sy = (-pos3.y * 0.5 + 0.5) * window.innerHeight;
+        const showLabel = cam.zoomRef.current > 100 && pos3.z < 1;
+        meLabelRef.current.style.left = sx + 'px';
+        meLabelRef.current.style.top = (sy - 20) + 'px';
+        meLabelRef.current.style.display = showLabel ? 'block' : 'none';
+      }
 
       updateLines();
       composer.render();
@@ -984,6 +1075,37 @@ export default function Galaxy({ refSlug }: GalaxyProps) {
         </svg>
       </button>
 
+      {/* Find me button — only visible after creating a dot */}
+      {myDotIdx >= 0 && (
+        <button
+          onClick={flyToMyDot}
+          title="find my dot"
+          className="fixed z-20 cursor-pointer transition-opacity duration-300 active:scale-90 bottom-5 left-[56px] sm:bottom-10 sm:left-[70px]"
+          style={{
+            width: '44px',
+            height: '44px',
+            background: 'none',
+            border: 'none',
+            opacity: 0.25,
+            padding: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.6'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.25'; }}
+        >
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#55556a" strokeWidth="1.5" strokeLinecap="round">
+            <circle cx="12" cy="12" r="8" />
+            <circle cx="12" cy="12" r="2.5" />
+            <line x1="12" y1="2" x2="12" y2="5" />
+            <line x1="12" y1="19" x2="12" y2="22" />
+            <line x1="2" y1="12" x2="5" y2="12" />
+            <line x1="19" y1="12" x2="22" y2="12" />
+          </svg>
+        </button>
+      )}
+
       {/* Make yours button */}
       <button
         onClick={() => setBuilderOpen(true)}
@@ -1022,7 +1144,30 @@ export default function Galaxy({ refSlug }: GalaxyProps) {
       />
 
       {/* Preview of newly created dot */}
-      <CardPreview dot={previewDot} onClose={() => setPreviewDot(null)} />
+      <CardPreview dot={previewDot} onClose={() => {
+        setPreviewDot(null);
+        // Fly to the user's dot when they close the preview
+        flyToMyDot();
+      }} />
+
+      {/* "me" label — projected from 3D, visible when zoomed out */}
+      {myDotIdx >= 0 && (
+        <div
+          ref={meLabelRef}
+          className="fixed z-[15] pointer-events-none"
+          style={{
+            fontSize: '8px',
+            letterSpacing: '2px',
+            textTransform: 'uppercase',
+            color: 'rgba(255,255,255,0.3)',
+            fontWeight: 300,
+            transform: 'translateX(-50%)',
+            display: 'none',
+          }}
+        >
+          me
+        </div>
+      )}
     </>
   );
 }

@@ -22,3 +22,27 @@ export const dotFragmentShader = `
     gl_FragColor = vec4(c, a);
   }
 `;
+
+// Halo ring shader — renders a soft ring around the user's dot
+export const ringVertexShader = `
+  attribute float size;
+  varying vec3 vC;
+  void main() {
+    vC = color;
+    vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    gl_PointSize = size * (300.0 / -mv.z);
+    gl_PointSize = clamp(gl_PointSize, 4.0, 120.0);
+    gl_Position = projectionMatrix * mv;
+  }
+`;
+
+export const ringFragmentShader = `
+  varying vec3 vC;
+  void main() {
+    float d = length(gl_PointCoord - vec2(0.5));
+    if (d > 0.5) discard;
+    float ring = smoothstep(0.30, 0.36, d) * (1.0 - smoothstep(0.40, 0.50, d));
+    if (ring < 0.01) discard;
+    gl_FragColor = vec4(vC, ring * 0.35);
+  }
+`;
