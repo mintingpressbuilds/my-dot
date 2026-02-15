@@ -58,6 +58,63 @@ export const sparks = pgTable('sparks', {
   index('sparks_session_idx').on(t.sessionHash),
 ]);
 
+// maps
+export const maps = pgTable('maps', {
+  id: text('id').primaryKey(),
+  slug: text('slug').unique().notNull(),
+  name: text('name').notNull(),
+  description: text('description'),
+  color: text('color').notNull(),
+  type: text('type').notNull().default('custom'),
+  visibility: text('visibility').notNull().default('public'),
+  ownerId: text('owner_id').notNull().references(() => users.id),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => [
+  index('maps_slug_idx').on(t.slug),
+  index('maps_owner_id_idx').on(t.ownerId),
+]);
+
+// map_dots (join table — existing dots added to a map)
+export const mapDots = pgTable('map_dots', {
+  id: text('id').primaryKey(),
+  mapId: text('map_id').notNull().references(() => maps.id, { onDelete: 'cascade' }),
+  dotId: text('dot_id').notNull().references(() => dots.id, { onDelete: 'cascade' }),
+  addedAt: timestamp('added_at').defaultNow().notNull(),
+}, (t) => [
+  unique('map_dots_unique').on(t.mapId, t.dotId),
+  index('map_dots_map_id_idx').on(t.mapId),
+  index('map_dots_dot_id_idx').on(t.dotId),
+]);
+
+// map_items (non-user items: songs, places, ideas)
+export const mapItems = pgTable('map_items', {
+  id: text('id').primaryKey(),
+  mapId: text('map_id').notNull().references(() => maps.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  color: text('color').notNull(),
+  line: text('line'),
+  link: text('link'),
+  posX: real('pos_x').notNull().default(0),
+  posY: real('pos_y').notNull().default(0),
+  posZ: real('pos_z').notNull().default(0),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => [
+  index('map_items_map_id_idx').on(t.mapId),
+]);
+
+// map_connections (connections between items within a map)
+export const mapConnections = pgTable('map_connections', {
+  id: text('id').primaryKey(),
+  mapId: text('map_id').notNull().references(() => maps.id, { onDelete: 'cascade' }),
+  fromItemId: text('from_item_id').notNull(),
+  toItemId: text('to_item_id').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => [
+  unique('map_connections_unique').on(t.mapId, t.fromItemId, t.toItemId),
+  index('map_connections_map_id_idx').on(t.mapId),
+]);
+
 // magic_links
 export const magicLinks = pgTable('magic_links', {
   id: text('id').primaryKey(),
