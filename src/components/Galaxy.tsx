@@ -7,6 +7,10 @@ import { dotVertexShader, dotFragmentShader } from '@/lib/shaders';
 import { usePhysics } from '@/hooks/usePhysics';
 import { useCamera } from '@/hooks/useCamera';
 import DotTooltip from './DotTooltip';
+import CardBuilder from './CardBuilder';
+import CardPreview from './CardPreview';
+import { PALETTE } from '@/lib/colors';
+import type { Vibe } from '@/lib/colors';
 
 export default function Galaxy() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -29,6 +33,8 @@ export default function Galaxy() {
   const [dotCount, setDotCount] = useState(0);
   const [tooltip, setTooltip] = useState<{ x: number; y: number; name: string; line: string; color: string } | null>(null);
   const [selectedDot, setSelectedDot] = useState<DotData | null>(null);
+  const [builderOpen, setBuilderOpen] = useState(false);
+  const [previewDot, setPreviewDot] = useState<DotData | null>(null);
 
   const physics = usePhysics();
   const cam = useCamera();
@@ -130,6 +136,73 @@ export default function Galaxy() {
       atZ
     );
   }, []);
+
+  const rebuildGeometry = useCallback(() => {
+    const geo = geometryRef.current;
+    const scene = sceneRef.current;
+    if (!geo || !scene) return;
+
+    const dots = physics.dotsRef.current;
+    const n = dots.length;
+    const np = new Float32Array(n * 3);
+    const nc = new Float32Array(n * 3);
+    const ns = new Float32Array(n);
+
+    for (let i = 0; i < n; i++) {
+      np[i * 3] = dots[i].px;
+      np[i * 3 + 1] = dots[i].py;
+      np[i * 3 + 2] = dots[i].pz;
+      const c = new THREE.Color(dots[i].color);
+      nc[i * 3] = c.r;
+      nc[i * 3 + 1] = c.g;
+      nc[i * 3 + 2] = c.b;
+      ns[i] = 2.8 + Math.random() * 1.8;
+    }
+
+    geo.setAttribute('position', new THREE.BufferAttribute(np, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(nc, 3));
+    geo.setAttribute('size', new THREE.BufferAttribute(ns, 1));
+
+    // rebuild lines
+    buildLines();
+  }, [physics.dotsRef, buildLines]);
+
+  const handleCreateDot = useCallback((dotData: { name: string; color: string; line: string; vibe: Vibe; link: string }) => {
+    setBuilderOpen(false);
+
+    const dots = physics.dotsRef.current;
+    const theta = Math.random() * Math.PI * 2;
+    const phi = Math.acos(2 * Math.random() - 1);
+    const r = 15 + Math.random() * 20;
+
+    const newDot: DotData = {
+      id: dots.length,
+      name: dotData.name,
+      color: dotData.color,
+      line: dotData.line,
+      vibe: dotData.vibe,
+      link: dotData.link,
+      // start at center (0,0,0), spring pulls to home
+      px: 0, py: 0, pz: 0,
+      hx: r * Math.sin(phi) * Math.cos(theta),
+      hy: r * Math.sin(phi) * Math.sin(theta),
+      hz: r * Math.cos(phi),
+      vx: 0, vy: 0, vz: 0,
+      friends: [],
+      grabbed: false,
+    };
+
+    // 2-3 random friend connections
+    const friendCount = 2 + ~~(Math.random() * 2);
+    for (let i = 0; i < friendCount; i++) {
+      newDot.friends.push(~~(Math.random() * dots.length));
+    }
+
+    dots.push(newDot);
+    rebuildGeometry();
+    setDotCount(dots.length);
+    setPreviewDot(newDot);
+  }, [physics.dotsRef, rebuildGeometry]);
 
   // initialize scene
   useEffect(() => {
@@ -431,6 +504,8 @@ export default function Galaxy() {
       if (e.code === 'Escape') {
         physics.setGravityPoint(null);
         setSelectedDot(null);
+        setBuilderOpen(false);
+        setPreviewDot(null);
       }
     };
 
@@ -470,6 +545,8 @@ export default function Galaxy() {
     physics.resetAll();
     cam.reset();
     setSelectedDot(null);
+    setBuilderOpen(false);
+    setPreviewDot(null);
   }, [physics, cam]);
 
   return (
@@ -496,42 +573,45 @@ export default function Galaxy() {
         drag to orbit · scroll to zoom · click a dot · spacebar to scatter
       </div>
 
+      {/* Make yours button */}
+      <button
+        onClick={() => setBuilderOpen(true)}
+        className="fixed bottom-9 max-sm:bottom-6 left-1/2 -translate-x-1/2 z-20 text-[13px] max-sm:text-xs font-normal tracking-[2px] lowercase text-white cursor-pointer transition-all duration-[400ms]"
+        style={{
+          background: 'rgba(255,255,255,0.05)',
+          border: '1px solid rgba(255,255,255,0.07)',
+          padding: '14px 40px',
+          borderRadius: '40px',
+          backdropFilter: 'blur(20px)',
+          fontFamily: "'DM Sans', sans-serif",
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
+          e.currentTarget.style.borderColor = 'rgba(255,255,255,0.14)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
+          e.currentTarget.style.borderColor = 'rgba(255,255,255,0.07)';
+        }}
+      >
+        make yours
+      </button>
+
       {/* Tooltip */}
       <DotTooltip tooltip={tooltip} />
 
-      {/* Selected dot card preview - placeholder for Phase 2 */}
-      {selectedDot && (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-[rgba(3,3,5,0.88)] backdrop-blur-[40px]"
-          onClick={() => setSelectedDot(null)}
-        >
-          <div
-            className="w-[min(380px,88vw)] bg-[#0a0a10] border border-[#1a1a24] rounded-3xl p-10 max-sm:p-7 relative animate-slideUp"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              className="absolute top-4 right-5 text-lg text-[#55556a] hover:text-[#d0d0dd] bg-transparent border-none cursor-pointer font-sans"
-              onClick={() => setSelectedDot(null)}
-            >
-              ×
-            </button>
-            <div className="font-serif text-[38px] max-sm:text-[30px] italic text-white tracking-tight mb-2">
-              {selectedDot.name}
-            </div>
-            <div className="text-sm text-white/45 font-light leading-relaxed mb-auto max-w-[280px]">
-              {selectedDot.line}
-            </div>
-            <div className="flex justify-between mt-5 pt-3.5 border-t border-white/5">
-              <div className="text-[9px] tracking-[2px] uppercase text-white/15 font-light">
-                {selectedDot.vibe}
-              </div>
-              <div className="font-serif italic text-[11px] text-white/12">
-                my dot.
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Clicked dot card preview */}
+      <CardPreview dot={selectedDot} onClose={() => setSelectedDot(null)} />
+
+      {/* Builder modal */}
+      <CardBuilder
+        open={builderOpen}
+        onClose={() => setBuilderOpen(false)}
+        onSubmit={handleCreateDot}
+      />
+
+      {/* Preview of newly created dot */}
+      <CardPreview dot={previewDot} onClose={() => setPreviewDot(null)} />
     </>
   );
 }
