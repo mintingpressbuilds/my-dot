@@ -16,6 +16,7 @@ import { hexToHue } from '@/lib/colors';
 import DotTooltip from './DotTooltip';
 import CardBuilder from './CardBuilder';
 import CardPreview from './CardPreview';
+import MapAddModal from './MapAddModal';
 import { PALETTE } from '@/lib/colors';
 import type { Vibe } from '@/lib/colors';
 
@@ -30,11 +31,34 @@ function easeInOut(t: number): number {
   return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
 }
 
-interface GalaxyProps {
-  refSlug?: string;
+export interface GalaxyDot {
+  id: string;
+  name: string;
+  color: string;
+  line: string;
+  vibe?: string;
+  x: number;
+  y: number;
+  z: number;
 }
 
-export default function Galaxy({ refSlug }: GalaxyProps) {
+export interface MapModeConfig {
+  mapId: string;
+  mapSlug: string;
+  mapName: string;
+  mapDescription?: string | null;
+  mapColor: string;
+  isOwner: boolean;
+  connections?: { id: string; fromItemId: string; toItemId: string }[];
+}
+
+interface GalaxyProps {
+  refSlug?: string;
+  initialDots?: GalaxyDot[];
+  mapMode?: MapModeConfig;
+}
+
+export default function Galaxy({ refSlug, initialDots, mapMode }: GalaxyProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const composerRef = useRef<EffectComposer | null>(null);
@@ -492,8 +516,35 @@ export default function Galaxy({ refSlug }: GalaxyProps) {
       sizeAttenuation: true,
     })));
 
-    // generate dots
-    const dots = generateDots(250);
+    // generate or use provided dots
+    const dots = initialDots
+      ? initialDots.map((d, i) => ({
+          id: i,
+          slug: d.id,
+          name: d.name,
+          color: d.color,
+          line: d.line,
+          vibe: (d.vibe || 'serene') as Vibe,
+          link: '',
+          px: d.x, py: d.y, pz: d.z,
+          hx: d.x, hy: d.y, hz: d.z,
+          vx: 0, vy: 0, vz: 0,
+          friends: [] as number[],
+          grabbed: false,
+        }))
+      : generateDots(250);
+
+    // If external dots, assign random friends for physics
+    if (initialDots && dots.length > 1) {
+      for (let i = 0; i < dots.length; i++) {
+        const n = 1 + ~~(Math.random() * 2);
+        for (let j = 0; j < n; j++) {
+          const fi = ~~(Math.random() * dots.length);
+          if (fi !== i) dots[i].friends.push(fi);
+        }
+      }
+    }
+
     physics.setDots(dots);
 
     sizeBoostRef.current = new Float32Array(dots.length);
@@ -1048,19 +1099,33 @@ export default function Galaxy({ refSlug }: GalaxyProps) {
     <>
       <div ref={containerRef} className="fixed inset-0 z-[1]" style={{ touchAction: 'none' }} />
 
-      {/* Logo */}
-      <div
-        className="fixed z-20 cursor-pointer top-[max(env(safe-area-inset-top,0px),16px)] left-4 sm:top-7 sm:left-7"
-        onClick={handleLogoClick}
-      >
-        <span className="font-serif text-[18px] sm:text-[22px] italic text-white/60 tracking-tight">
-          my dot<span className="text-[#55556a] not-italic font-extralight">.</span>
-        </span>
-      </div>
+      {/* Logo / Map header */}
+      {mapMode ? (
+        <div className="fixed z-20 top-[max(env(safe-area-inset-top,0px),16px)] left-4 sm:top-7 sm:left-7 flex items-center gap-3">
+          <a href="/" className="text-white/30 hover:text-white/60 transition-colors no-underline text-lg">&larr;</a>
+          <div>
+            <div className="font-serif text-[18px] sm:text-[22px] italic tracking-tight" style={{ color: mapMode.mapColor }}>
+              {mapMode.mapName}
+            </div>
+            {mapMode.mapDescription && (
+              <div className="text-[10px] text-white/25 font-light mt-0.5">{mapMode.mapDescription}</div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div
+          className="fixed z-20 cursor-pointer top-[max(env(safe-area-inset-top,0px),16px)] left-4 sm:top-7 sm:left-7"
+          onClick={handleLogoClick}
+        >
+          <span className="font-serif text-[18px] sm:text-[22px] italic text-white/60 tracking-tight">
+            my dot<span className="text-[#55556a] not-italic font-extralight">.</span>
+          </span>
+        </div>
+      )}
 
       {/* Dot count */}
       <div className="fixed z-20 text-[9px] sm:text-[10px] tracking-[2px] text-[#55556a] font-light text-right leading-relaxed top-[max(env(safe-area-inset-top,0px),18px)] right-4 sm:top-8 sm:right-7">
-        <span className="text-[#d0d0dd] font-normal">{dotCount}</span> dots
+        <span className="text-[#d0d0dd] font-normal">{dotCount}</span> {mapMode ? 'in map' : 'dots'}
       </div>
 
       {/* Mode badge */}
@@ -1073,12 +1138,14 @@ export default function Galaxy({ refSlug }: GalaxyProps) {
         </div>
       )}
 
-      {/* Hint text */}
-      <div className="fixed bottom-[72px] sm:bottom-[100px] left-1/2 -translate-x-1/2 z-[15] text-[9px] sm:text-[11px] text-[#55556a] tracking-[1.5px] font-light text-center pointer-events-none animate-fadeHint whitespace-nowrap">
-        {isMobile
-          ? 'tap \u00b7 pinch \u00b7 hold \u00b7 shake'
-          : 'drag to orbit \u00b7 scroll to zoom \u00b7 click a dot \u00b7 hold to orbit \u00b7 spacebar to scatter'}
-      </div>
+      {/* Hint text — global only */}
+      {!mapMode && (
+        <div className="fixed bottom-[72px] sm:bottom-[100px] left-1/2 -translate-x-1/2 z-[15] text-[9px] sm:text-[11px] text-[#55556a] tracking-[1.5px] font-light text-center pointer-events-none animate-fadeHint whitespace-nowrap">
+          {isMobile
+            ? 'tap \u00b7 pinch \u00b7 hold \u00b7 shake'
+            : 'drag to orbit \u00b7 scroll to zoom \u00b7 click a dot \u00b7 hold to orbit \u00b7 spacebar to scatter'}
+        </div>
+      )}
 
       {/* Color mode toggle */}
       <button
@@ -1101,8 +1168,8 @@ export default function Galaxy({ refSlug }: GalaxyProps) {
         </svg>
       </button>
 
-      {/* Find me button — only visible after creating a dot */}
-      {myDotIdx >= 0 && (
+      {/* Find me button — global only, visible after creating a dot */}
+      {!mapMode && myDotIdx >= 0 && (
         <button
           onClick={flyToMyDot}
           title="find my dot"
@@ -1132,29 +1199,64 @@ export default function Galaxy({ refSlug }: GalaxyProps) {
         </button>
       )}
 
-      {/* Make yours button */}
-      <button
-        onClick={() => setBuilderOpen(true)}
-        className="fixed z-20 left-1/2 -translate-x-1/2 text-xs sm:text-[13px] font-normal tracking-[2px] lowercase text-white cursor-pointer transition-all duration-[400ms] active:scale-95 bottom-5 sm:bottom-9"
-        style={{
-          background: 'rgba(255,255,255,0.06)',
-          border: '1px solid rgba(255,255,255,0.08)',
-          padding: '13px 36px',
-          borderRadius: '40px',
-          backdropFilter: 'blur(20px)',
-          fontFamily: "'DM Sans', sans-serif",
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-          e.currentTarget.style.borderColor = 'rgba(255,255,255,0.14)';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
-          e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)';
-        }}
-      >
-        make yours
-      </button>
+      {/* Make yours button — global only */}
+      {!mapMode && (
+        <button
+          onClick={() => setBuilderOpen(true)}
+          className="fixed z-20 left-1/2 -translate-x-1/2 text-xs sm:text-[13px] font-normal tracking-[2px] lowercase text-white cursor-pointer transition-all duration-[400ms] active:scale-95 bottom-5 sm:bottom-9"
+          style={{
+            background: 'rgba(255,255,255,0.06)',
+            border: '1px solid rgba(255,255,255,0.08)',
+            padding: '13px 36px',
+            borderRadius: '40px',
+            backdropFilter: 'blur(20px)',
+            fontFamily: "'DM Sans', sans-serif",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
+            e.currentTarget.style.borderColor = 'rgba(255,255,255,0.14)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
+            e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)';
+          }}
+        >
+          make yours
+        </button>
+      )}
+
+      {/* Map mode: "add" button for owner */}
+      {mapMode?.isOwner && (
+        <button
+          onClick={() => setBuilderOpen(true)}
+          className="fixed z-20 bottom-5 sm:bottom-9 right-4 sm:right-7 cursor-pointer transition-all duration-300 active:scale-90"
+          style={{
+            width: '48px',
+            height: '48px',
+            borderRadius: '50%',
+            background: mapMode.mapColor,
+            border: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: `0 4px 20px ${mapMode.mapColor}40`,
+          }}
+        >
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+        </button>
+      )}
+
+      {/* Empty state for maps */}
+      {mapMode && dotCount === 0 && (
+        <div className="fixed z-[15] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
+          <div className="text-[11px] text-white/20 font-light tracking-[1.5px]">
+            add your first dot
+          </div>
+        </div>
+      )}
 
       {/* Tooltip */}
       <DotTooltip tooltip={tooltip} />
@@ -1162,36 +1264,81 @@ export default function Galaxy({ refSlug }: GalaxyProps) {
       {/* Clicked dot card preview */}
       <CardPreview dot={selectedDot} onClose={() => setSelectedDot(null)} />
 
-      {/* Builder modal */}
-      <CardBuilder
-        open={builderOpen}
-        onClose={() => setBuilderOpen(false)}
-        onSubmit={handleCreateDot}
-      />
+      {/* Builder modal — global */}
+      {!mapMode && (
+        <CardBuilder
+          open={builderOpen}
+          onClose={() => setBuilderOpen(false)}
+          onSubmit={handleCreateDot}
+        />
+      )}
 
-      {/* Preview of newly created dot */}
-      <CardPreview dot={previewDot} onClose={() => {
-        setPreviewDot(null);
-        // Fly to the user's dot when they close the preview
-        flyToMyDot();
-      }} />
+      {/* Map mode: add item modal */}
+      {mapMode && builderOpen && (
+        <MapAddModal
+          mapId={mapMode.mapId}
+          mapColor={mapMode.mapColor}
+          onClose={() => setBuilderOpen(false)}
+          onItemAdded={(item) => {
+            setBuilderOpen(false);
+            // Add the new item to the galaxy locally
+            const dots = physics.dotsRef.current;
+            const theta = Math.random() * Math.PI * 2;
+            const phi = Math.acos(2 * Math.random() - 1);
+            const r = 10 + Math.random() * 30;
+            const newDot: DotData = {
+              id: dots.length,
+              name: item.name,
+              color: item.color,
+              line: item.line || '',
+              vibe: 'serene' as Vibe,
+              link: item.link || '',
+              px: 0, py: 0, pz: 0,
+              hx: r * Math.sin(phi) * Math.cos(theta),
+              hy: r * Math.sin(phi) * Math.sin(theta),
+              hz: r * Math.cos(phi),
+              vx: 0, vy: 0, vz: 0,
+              friends: [],
+              grabbed: false,
+            };
+            if (dots.length > 0) {
+              newDot.friends.push(~~(Math.random() * dots.length));
+            }
+            dots.push(newDot);
+            rebuildGeometry();
+            setDotCount(dots.length);
+            triggerGalaxyPulse();
+            triggerRipple(dots.length - 1);
+          }}
+        />
+      )}
 
-      {/* "me" label — projected from 3D, visible when zoomed out */}
-      <div
-        ref={meLabelRef}
-        className="fixed z-[15] pointer-events-none"
-        style={{
-          fontSize: '8px',
-          letterSpacing: '2px',
-          textTransform: 'uppercase',
-          color: 'rgba(255,255,255,0.35)',
-          fontWeight: 300,
-          transform: 'translateX(-50%)',
-          display: 'none',
-        }}
-      >
-        me
-      </div>
+      {/* Preview of newly created dot — global only */}
+      {!mapMode && (
+        <CardPreview dot={previewDot} onClose={() => {
+          setPreviewDot(null);
+          flyToMyDot();
+        }} />
+      )}
+
+      {/* "me" label — projected from 3D, visible when zoomed out, global only */}
+      {!mapMode && (
+        <div
+          ref={meLabelRef}
+          className="fixed z-[15] pointer-events-none"
+          style={{
+            fontSize: '8px',
+            letterSpacing: '2px',
+            textTransform: 'uppercase',
+            color: 'rgba(255,255,255,0.35)',
+            fontWeight: 300,
+            transform: 'translateX(-50%)',
+            display: 'none',
+          }}
+        >
+          me
+        </div>
+      )}
     </>
   );
 }
