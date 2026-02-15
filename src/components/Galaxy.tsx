@@ -99,6 +99,11 @@ export default function Galaxy({ refSlug, initialDots, mapMode }: GalaxyProps) {
   // color mode
   const colorModeActiveRef = useRef(false);
 
+  // trail system — 12 history points per dot
+  const TRAIL_LENGTH = 12;
+  const trailHistoryRef = useRef<Float32Array[]>([]);
+  const trailMeshRef = useRef<THREE.LineSegments | null>(null);
+
   // shake
   const lastShakeTimeRef = useRef(0);
 
@@ -367,6 +372,28 @@ export default function Galaxy({ refSlug, initialDots, mapMode }: GalaxyProps) {
 
     sizeBoostRef.current = new Float32Array(n);
 
+    // rebuild trail history for new dot count
+    const newTrailHistory: Float32Array[] = [];
+    for (let t = 0; t < TRAIL_LENGTH; t++) {
+      const buf = new Float32Array(n * 3);
+      for (let j = 0; j < n; j++) {
+        buf[j * 3] = dots[j].px;
+        buf[j * 3 + 1] = dots[j].py;
+        buf[j * 3 + 2] = dots[j].pz;
+      }
+      newTrailHistory.push(buf);
+    }
+    trailHistoryRef.current = newTrailHistory;
+
+    // resize trail geometry
+    if (trailMeshRef.current) {
+      const maxTrailVerts = n * (TRAIL_LENGTH - 1) * 2;
+      const trailGeo = trailMeshRef.current.geometry;
+      trailGeo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(maxTrailVerts * 3), 3));
+      trailGeo.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(maxTrailVerts * 3), 3));
+      trailGeo.setDrawRange(0, 0);
+    }
+
     buildLines();
   }, [physics.dotsRef, buildLines]);
 
@@ -597,6 +624,36 @@ export default function Galaxy({ refSlug, initialDots, mapMode }: GalaxyProps) {
 
     buildLines();
 
+    // trail system initialization — 12 history slots per dot (x,y,z)
+    const trailHistory: Float32Array[] = [];
+    for (let i = 0; i < TRAIL_LENGTH; i++) {
+      const buf = new Float32Array(N * 3);
+      for (let j = 0; j < N; j++) {
+        buf[j * 3] = dots[j].px;
+        buf[j * 3 + 1] = dots[j].py;
+        buf[j * 3 + 2] = dots[j].pz;
+      }
+      trailHistory.push(buf);
+    }
+    trailHistoryRef.current = trailHistory;
+
+    // trail line segments (each dot can have up to TRAIL_LENGTH-1 segments = 2 verts each)
+    const maxTrailVerts = N * (TRAIL_LENGTH - 1) * 2;
+    const trailGeo = new THREE.BufferGeometry();
+    trailGeo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(maxTrailVerts * 3), 3));
+    trailGeo.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(maxTrailVerts * 3), 3));
+    trailGeo.setDrawRange(0, 0);
+    const trailMat = new THREE.LineBasicMaterial({
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.6,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const trailMesh = new THREE.LineSegments(trailGeo, trailMat);
+    trailMeshRef.current = trailMesh;
+    scene.add(trailMesh);
+
     // animate count
     let count = 0;
     const countUp = () => {
@@ -699,6 +756,11 @@ export default function Galaxy({ refSlug, initialDots, mapMode }: GalaxyProps) {
       // update physics
       physics.step();
 
+      // brightness breathing — 8-second cycle
+      const breathCycle = Math.sin(t * 0.785) * 0.5 + 0.5;
+      const breathScale = 1.0 + breathCycle * 0.15;
+      bloomPass.strength = 0.3 + breathCycle * 0.1;
+
       // galaxy pulse decay
       if (galaxyPulseRef.current > 0) {
         galaxyPulseRef.current *= 0.94;
@@ -737,18 +799,24 @@ export default function Galaxy({ refSlug, initialDots, mapMode }: GalaxyProps) {
       const posArr = geo.attributes.position.array as Float32Array;
       const sizeArr = geo.attributes.size.array as Float32Array;
       const colArr = geo.attributes.color.array as Float32Array;
+      const brightArr = geo.attributes.brightness ? geo.attributes.brightness.array as Float32Array : null;
       for (let i = 0; i < currentDots.length && i * 3 + 2 < posArr.length; i++) {
         posArr[i * 3] = currentDots[i].px;
         posArr[i * 3 + 1] = currentDots[i].py;
         posArr[i * 3 + 2] = currentDots[i].pz;
 
-        // size: connection-scaled base + pulse + ripple boost + galaxy pulse
+        // size: connection-scaled base + pulse + ripple boost + galaxy pulse + breath
         const friendCount = currentDots[i].friends.length;
         const connectionScale = Math.min(friendCount / 5, 1.5);
         const baseSize = (2.5 + connectionScale * 2.0) + Math.sin(t * 0.7 + i * 1.1) * 0.7;
         const boost = sizeBoost.length > i ? sizeBoost[i] : 0;
         const gPulse = galaxyPulseRef.current * 2.0;
-        sizeArr[i] = baseSize + boost + gPulse;
+        sizeArr[i] = (baseSize + boost + gPulse) * breathScale;
+
+        // brightness: connection-based + breathing
+        if (brightArr) {
+          brightArr[i] = (0.7 + Math.min(friendCount / 8, 0.6)) * breathScale;
+        }
 
         if (i === refIndexRef.current) sizeArr[i] = 4.0 + Math.sin(t * 2.0) * 1.5;
         if (i === grabIndexRef.current) sizeArr[i] = 6.0;
@@ -815,6 +883,57 @@ export default function Galaxy({ refSlug, initialDots, mapMode }: GalaxyProps) {
         meLabelRef.current.style.left = sx + 'px';
         meLabelRef.current.style.top = (sy - 20) + 'px';
         meLabelRef.current.style.display = showLabel ? 'block' : 'none';
+      }
+
+      // gravity trails — shift history and build trail segments
+      const th = trailHistoryRef.current;
+      const tm = trailMeshRef.current;
+      if (th.length === TRAIL_LENGTH && tm) {
+        // shift history: drop oldest, push current positions
+        const oldest = th.shift()!;
+        for (let i = 0; i < currentDots.length && i * 3 + 2 < oldest.length; i++) {
+          oldest[i * 3] = currentDots[i].px;
+          oldest[i * 3 + 1] = currentDots[i].py;
+          oldest[i * 3 + 2] = currentDots[i].pz;
+        }
+        th.push(oldest);
+
+        // build trail line segments for fast-moving dots
+        const tPos = tm.geometry.attributes.position.array as Float32Array;
+        const tCol = tm.geometry.attributes.color.array as Float32Array;
+        let vi = 0;
+        const VELOCITY_THRESHOLD = 0.5;
+        for (let i = 0; i < currentDots.length; i++) {
+          const d = currentDots[i];
+          const speed = Math.sqrt(d.vx * d.vx + d.vy * d.vy + d.vz * d.vz);
+          if (speed < VELOCITY_THRESHOLD) continue;
+          const col = new THREE.Color(d.color);
+          for (let s = 0; s < TRAIL_LENGTH - 1; s++) {
+            const curr = th[TRAIL_LENGTH - 1 - s];
+            const prev = th[TRAIL_LENGTH - 2 - s];
+            if (!curr || !prev) break;
+            if (vi * 3 + 5 >= tPos.length) break;
+            const fade = 1.0 - s / (TRAIL_LENGTH - 1);
+            const alpha = fade * Math.min(speed / 2.0, 1.0);
+            tPos[vi * 3] = curr[i * 3];
+            tPos[vi * 3 + 1] = curr[i * 3 + 1];
+            tPos[vi * 3 + 2] = curr[i * 3 + 2];
+            tCol[vi * 3] = col.r * alpha;
+            tCol[vi * 3 + 1] = col.g * alpha;
+            tCol[vi * 3 + 2] = col.b * alpha;
+            vi++;
+            tPos[vi * 3] = prev[i * 3];
+            tPos[vi * 3 + 1] = prev[i * 3 + 1];
+            tPos[vi * 3 + 2] = prev[i * 3 + 2];
+            tCol[vi * 3] = col.r * alpha * 0.5;
+            tCol[vi * 3 + 1] = col.g * alpha * 0.5;
+            tCol[vi * 3 + 2] = col.b * alpha * 0.5;
+            vi++;
+          }
+        }
+        tm.geometry.setDrawRange(0, vi);
+        tm.geometry.attributes.position.needsUpdate = true;
+        tm.geometry.attributes.color.needsUpdate = true;
       }
 
       updateLines();
@@ -1089,6 +1208,10 @@ export default function Galaxy({ refSlug, initialDots, mapMode }: GalaxyProps) {
       document.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('resize', handleResize);
       if (motionCleanup) motionCleanup();
+      if (trailMeshRef.current) {
+        trailMeshRef.current.geometry.dispose();
+        (trailMeshRef.current.material as THREE.Material).dispose();
+      }
       renderer.dispose();
       if (container.contains(renderer.domElement)) {
         container.removeChild(renderer.domElement);
