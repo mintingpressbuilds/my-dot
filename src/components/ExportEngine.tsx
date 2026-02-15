@@ -11,7 +11,7 @@ function escH(s: string): string {
     .replace(/"/g, '&quot;');
 }
 
-export function exportDotHtml(dot: DotData): void {
+export function exportDotHtml(dot: DotData & { slug?: string }): void {
   const n = escH(dot.name);
   const l = escH(dot.line);
   const v = escH(dot.vibe);
@@ -51,7 +51,8 @@ export function exportDotHtml(dot: DotData): void {
   parts.push(lnk);
   parts.push('<div class="bt"><div class="vb">' + v + '<\/div><div class="br">my dot.<\/div><\/div>');
   parts.push('<\/div><\/div>');
-  parts.push('<div class="sh">made with <a href="https://mydot.space">my dot.<\/a><\/div>');
+  const ref = dot.slug || dot.name.toLowerCase().replace(/\s+/g, '-');
+  parts.push('<div class="sh">made with <a href="https://mydot.space?ref=' + escH(ref) + '">my dot.<\/a><\/div>');
   parts.push('<\/div>');
   parts.push('<script>');
   parts.push('var c=document.getElementById("bg"),x=c.getContext("2d");');

@@ -57,6 +57,8 @@ export function useCamera() {
     rotXRef,
     rotYRef,
     zoomRef,
+    targetXRef,
+    targetYRef,
     targetZoomRef,
     autoRotateRef,
     draggingRef,

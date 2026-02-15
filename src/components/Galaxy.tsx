@@ -12,7 +12,11 @@ import CardPreview from './CardPreview';
 import { PALETTE } from '@/lib/colors';
 import type { Vibe } from '@/lib/colors';
 
-export default function Galaxy() {
+interface GalaxyProps {
+  refSlug?: string;
+}
+
+export default function Galaxy({ refSlug }: GalaxyProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -20,6 +24,7 @@ export default function Galaxy() {
   const pointsRef = useRef<THREE.Points | null>(null);
   const geometryRef = useRef<THREE.BufferGeometry | null>(null);
   const lineSegRef = useRef<THREE.LineSegments | null>(null);
+  const mutualLineSegRef = useRef<THREE.LineSegments | null>(null);
   const clockRef = useRef(new THREE.Clock());
   const grabIndexRef = useRef(-1);
   const hoveredIndexRef = useRef(-1);
@@ -29,6 +34,7 @@ export default function Galaxy() {
   const tapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const touchDist0Ref = useRef(0);
   const frameRef = useRef(0);
+  const refIndexRef = useRef(-1);
 
   const [dotCount, setDotCount] = useState(0);
   const [tooltip, setTooltip] = useState<{ x: number; y: number; name: string; line: string; color: string } | null>(null);
@@ -42,6 +48,12 @@ export default function Galaxy() {
   // set raycaster threshold
   raycasterRef.current.params.Points!.threshold = 3;
 
+  const isMutual = useCallback((dotIdx: number, friendIdx: number) => {
+    const dots = physics.dotsRef.current;
+    if (friendIdx >= dots.length) return false;
+    return dots[friendIdx].friends.includes(dotIdx);
+  }, [physics.dotsRef]);
+
   const buildLines = useCallback(() => {
     const scene = sceneRef.current;
     const dots = physics.dotsRef.current;
@@ -52,50 +64,77 @@ export default function Galaxy() {
       scene.remove(lineSegRef.current);
       lineSegRef.current.geometry.dispose();
     }
+    if (mutualLineSegRef.current) {
+      scene.remove(mutualLineSegRef.current);
+      mutualLineSegRef.current.geometry.dispose();
+    }
 
-    const positions: number[] = [];
-    const colors: number[] = [];
+    const regPos: number[] = [];
+    const regCol: number[] = [];
+    const mutPos: number[] = [];
+    const mutCol: number[] = [];
 
-    dots.forEach((d) => {
+    dots.forEach((d, i) => {
       d.friends.forEach((fi) => {
         if (fi >= dots.length) return;
         const f = dots[fi];
-        positions.push(d.px, d.py, d.pz, f.px, f.py, f.pz);
         const c1 = new THREE.Color(d.color);
         const c2 = new THREE.Color(f.color);
-        colors.push(c1.r, c1.g, c1.b, c2.r, c2.g, c2.b);
+        const mutual = isMutual(i, fi);
+        if (mutual) {
+          mutPos.push(d.px, d.py, d.pz, f.px, f.py, f.pz);
+          mutCol.push(c1.r, c1.g, c1.b, c2.r, c2.g, c2.b);
+        } else {
+          regPos.push(d.px, d.py, d.pz, f.px, f.py, f.pz);
+          regCol.push(c1.r, c1.g, c1.b, c2.r, c2.g, c2.b);
+        }
       });
     });
 
-    const lineGeo = new THREE.BufferGeometry();
-    lineGeo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    lineGeo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-
-    const lineMat = new THREE.LineBasicMaterial({
-      vertexColors: true,
-      transparent: true,
-      opacity: 0.06,
-    });
-
-    lineSegRef.current = new THREE.LineSegments(lineGeo, lineMat);
+    // regular connections (0.06)
+    const regGeo = new THREE.BufferGeometry();
+    regGeo.setAttribute('position', new THREE.Float32BufferAttribute(regPos, 3));
+    regGeo.setAttribute('color', new THREE.Float32BufferAttribute(regCol, 3));
+    lineSegRef.current = new THREE.LineSegments(regGeo, new THREE.LineBasicMaterial({
+      vertexColors: true, transparent: true, opacity: 0.06,
+    }));
     scene.add(lineSegRef.current);
-  }, [physics.dotsRef]);
+
+    // mutual connections (0.12)
+    if (mutPos.length > 0) {
+      const mutGeo = new THREE.BufferGeometry();
+      mutGeo.setAttribute('position', new THREE.Float32BufferAttribute(mutPos, 3));
+      mutGeo.setAttribute('color', new THREE.Float32BufferAttribute(mutCol, 3));
+      mutualLineSegRef.current = new THREE.LineSegments(mutGeo, new THREE.LineBasicMaterial({
+        vertexColors: true, transparent: true, opacity: 0.12,
+      }));
+      scene.add(mutualLineSegRef.current);
+    }
+  }, [physics.dotsRef, isMutual]);
 
   const updateLines = useCallback(() => {
-    if (!lineSegRef.current) return;
     const dots = physics.dotsRef.current;
-    const arr = lineSegRef.current.geometry.attributes.position.array as Float32Array;
-    let idx = 0;
-    dots.forEach((d) => {
-      d.friends.forEach((fi) => {
-        if (fi >= dots.length) return;
-        const f = dots[fi];
-        arr[idx++] = d.px; arr[idx++] = d.py; arr[idx++] = d.pz;
-        arr[idx++] = f.px; arr[idx++] = f.py; arr[idx++] = f.pz;
+
+    // helper to update a line segment's positions
+    const updateSeg = (seg: THREE.LineSegments | null, filter: (dotIdx: number, friendIdx: number) => boolean) => {
+      if (!seg) return;
+      const arr = seg.geometry.attributes.position.array as Float32Array;
+      let idx = 0;
+      dots.forEach((d, i) => {
+        d.friends.forEach((fi) => {
+          if (fi >= dots.length) return;
+          if (!filter(i, fi)) return;
+          const f = dots[fi];
+          arr[idx++] = d.px; arr[idx++] = d.py; arr[idx++] = d.pz;
+          arr[idx++] = f.px; arr[idx++] = f.py; arr[idx++] = f.pz;
+        });
       });
-    });
-    lineSegRef.current.geometry.attributes.position.needsUpdate = true;
-  }, [physics.dotsRef]);
+      seg.geometry.attributes.position.needsUpdate = true;
+    };
+
+    updateSeg(lineSegRef.current, (i, fi) => !isMutual(i, fi));
+    updateSeg(mutualLineSegRef.current, (i, fi) => isMutual(i, fi));
+  }, [physics.dotsRef, isMutual]);
 
   const updateRaycast = useCallback((clientX: number, clientY: number): number => {
     const camera = cameraRef.current;
@@ -295,6 +334,27 @@ export default function Galaxy() {
     };
     setTimeout(countUp, 600);
 
+    // ref highlight: find dot by slug/name and zoom toward it
+    if (refSlug) {
+      const slug = refSlug.toLowerCase();
+      const idx = dots.findIndex((d) => d.name.toLowerCase() === slug);
+      if (idx >= 0) {
+        refIndexRef.current = idx;
+        // fly camera closer after a brief delay
+        setTimeout(() => {
+          cam.targetZoomRef.current = 60;
+          cam.autoRotateRef.current = false;
+          // orient camera toward the dot
+          const d = dots[idx];
+          const r = Math.sqrt(d.hx * d.hx + d.hy * d.hy + d.hz * d.hz);
+          if (r > 0) {
+            cam.targetXRef.current = Math.asin(d.hy / r);
+            cam.targetYRef.current = Math.atan2(d.hx, d.hz);
+          }
+        }, 800);
+      }
+    }
+
     // animation loop
     const loop = () => {
       frameRef.current = requestAnimationFrame(loop);
@@ -322,6 +382,7 @@ export default function Galaxy() {
         posArr[i * 3 + 1] = currentDots[i].py;
         posArr[i * 3 + 2] = currentDots[i].pz;
         sizeArr[i] = 2.8 + Math.sin(t * 0.7 + i * 1.1) * 0.5;
+        if (i === refIndexRef.current) sizeArr[i] = 4.0 + Math.sin(t * 2.0) * 1.5;
         if (i === grabIndexRef.current) sizeArr[i] = 5.0;
       }
       geo.attributes.position.needsUpdate = true;
