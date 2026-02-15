@@ -12,7 +12,11 @@ import CardPreview from './CardPreview';
 import { PALETTE } from '@/lib/colors';
 import type { Vibe } from '@/lib/colors';
 
-export default function Galaxy() {
+interface GalaxyProps {
+  refSlug?: string;
+}
+
+export default function Galaxy({ refSlug }: GalaxyProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -30,6 +34,7 @@ export default function Galaxy() {
   const tapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const touchDist0Ref = useRef(0);
   const frameRef = useRef(0);
+  const refIndexRef = useRef(-1);
 
   const [dotCount, setDotCount] = useState(0);
   const [tooltip, setTooltip] = useState<{ x: number; y: number; name: string; line: string; color: string } | null>(null);
@@ -329,6 +334,27 @@ export default function Galaxy() {
     };
     setTimeout(countUp, 600);
 
+    // ref highlight: find dot by slug/name and zoom toward it
+    if (refSlug) {
+      const slug = refSlug.toLowerCase();
+      const idx = dots.findIndex((d) => d.name.toLowerCase() === slug);
+      if (idx >= 0) {
+        refIndexRef.current = idx;
+        // fly camera closer after a brief delay
+        setTimeout(() => {
+          cam.targetZoomRef.current = 60;
+          cam.autoRotateRef.current = false;
+          // orient camera toward the dot
+          const d = dots[idx];
+          const r = Math.sqrt(d.hx * d.hx + d.hy * d.hy + d.hz * d.hz);
+          if (r > 0) {
+            cam.targetXRef.current = Math.asin(d.hy / r);
+            cam.targetYRef.current = Math.atan2(d.hx, d.hz);
+          }
+        }, 800);
+      }
+    }
+
     // animation loop
     const loop = () => {
       frameRef.current = requestAnimationFrame(loop);
@@ -356,6 +382,7 @@ export default function Galaxy() {
         posArr[i * 3 + 1] = currentDots[i].py;
         posArr[i * 3 + 2] = currentDots[i].pz;
         sizeArr[i] = 2.8 + Math.sin(t * 0.7 + i * 1.1) * 0.5;
+        if (i === refIndexRef.current) sizeArr[i] = 4.0 + Math.sin(t * 2.0) * 1.5;
         if (i === grabIndexRef.current) sizeArr[i] = 5.0;
       }
       geo.attributes.position.needsUpdate = true;
