@@ -96,6 +96,7 @@ export default async function DotPage({ params }: Props) {
     color: dot.color,
     line: dot.line,
     vibe: dot.vibe,
+    theme: dot.theme,
     link: dot.link,
     sparkCount: dot.sparkCount,
     createdAt: dot.createdAt.toISOString(),
