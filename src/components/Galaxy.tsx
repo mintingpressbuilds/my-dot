@@ -121,7 +121,7 @@ export default function Galaxy({ refSlug, initialDots, mapMode }: GalaxyProps) {
   const physics = usePhysics();
   const cam = useCamera();
 
-  raycasterRef.current.params.Points!.threshold = 3;
+  raycasterRef.current.params.Points!.threshold = 1.8;
 
   const showMode = useCallback((label: string, duration = 2000) => {
     setModeBadge(label);
@@ -532,7 +532,7 @@ export default function Galaxy({ refSlug, initialDots, mapMode }: GalaxyProps) {
           friends: [] as number[],
           grabbed: false,
         }))
-      : generateDots(250);
+      : generateDots(50);
 
     // If external dots, assign random friends for physics
     if (initialDots && dots.length > 1) {
