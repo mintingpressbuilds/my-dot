@@ -933,23 +933,23 @@ export default function Galaxy({ refSlug }: GalaxyProps) {
 
       {/* Logo */}
       <div
-        className="fixed top-7 left-7 z-20 cursor-pointer max-sm:top-4 max-sm:left-4"
+        className="fixed z-20 cursor-pointer top-[max(env(safe-area-inset-top,0px),16px)] left-4 sm:top-7 sm:left-7"
         onClick={handleLogoClick}
       >
-        <span className="font-serif text-[22px] max-sm:text-[18px] italic text-white/60 tracking-tight">
+        <span className="font-serif text-[18px] sm:text-[22px] italic text-white/60 tracking-tight">
           my dot<span className="text-[#55556a] not-italic font-extralight">.</span>
         </span>
       </div>
 
       {/* Dot count */}
-      <div className="fixed top-8 right-7 z-20 text-[10px] max-sm:top-5 max-sm:right-4 max-sm:text-[9px] tracking-[2px] text-[#55556a] font-light text-right leading-relaxed">
+      <div className="fixed z-20 text-[9px] sm:text-[10px] tracking-[2px] text-[#55556a] font-light text-right leading-relaxed top-[max(env(safe-area-inset-top,0px),18px)] right-4 sm:top-8 sm:right-7">
         <span className="text-[#d0d0dd] font-normal">{dotCount}</span> dots
       </div>
 
       {/* Mode badge */}
       {modeBadge && (
         <div
-          className="fixed top-1/2 left-7 max-sm:left-4 -translate-y-1/2 z-20 text-[9px] tracking-[3px] uppercase text-[#55556a] font-light pointer-events-none transition-opacity duration-400"
+          className="fixed top-1/2 left-4 sm:left-7 -translate-y-1/2 z-20 text-[9px] tracking-[3px] uppercase text-[#55556a] font-light pointer-events-none transition-opacity duration-400"
           style={{ writingMode: 'vertical-rl', opacity: 0.6 }}
         >
           {modeBadge}
@@ -957,16 +957,16 @@ export default function Galaxy({ refSlug }: GalaxyProps) {
       )}
 
       {/* Hint text */}
-      <div className="fixed bottom-[100px] max-sm:bottom-[76px] left-1/2 -translate-x-1/2 z-[15] text-[11px] max-sm:text-[9px] text-[#55556a] tracking-[1.5px] font-light text-center pointer-events-none animate-fadeHint">
+      <div className="fixed bottom-[72px] sm:bottom-[100px] left-1/2 -translate-x-1/2 z-[15] text-[9px] sm:text-[11px] text-[#55556a] tracking-[1.5px] font-light text-center pointer-events-none animate-fadeHint whitespace-nowrap">
         {isMobile
-          ? 'tap to explore \u00b7 pinch to zoom \u00b7 hold a dot \u00b7 shake to scatter'
+          ? 'tap \u00b7 pinch \u00b7 hold \u00b7 shake'
           : 'drag to orbit \u00b7 scroll to zoom \u00b7 click a dot \u00b7 hold to orbit \u00b7 spacebar to scatter'}
       </div>
 
       {/* Color mode toggle */}
       <button
         onClick={toggleColorMode}
-        className="fixed bottom-10 left-7 max-sm:left-4 max-sm:bottom-6 z-20 cursor-pointer transition-opacity duration-300 active:scale-90"
+        className="fixed z-20 cursor-pointer transition-opacity duration-300 active:scale-90 bottom-5 left-4 sm:bottom-10 sm:left-7"
         style={{
           width: '44px',
           height: '44px',
@@ -979,7 +979,7 @@ export default function Galaxy({ refSlug }: GalaxyProps) {
           justifyContent: 'center',
         }}
       >
-        <svg viewBox="0 0 24 24" width="28" height="28" fill="#55556a">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="#55556a">
           <path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-1 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zm-5.5 9c-.83 0-1.5-.67-1.5-1.5S5.67 9 6.5 9 8 9.67 8 10.5 7.33 12 6.5 12zm3-4C8.67 8 8 7.33 8 6.5S8.67 5 9.5 5s1.5.67 1.5 1.5S10.33 8 9.5 8zm5 0c-.83 0-1.5-.67-1.5-1.5S13.67 5 14.5 5s1.5.67 1.5 1.5S15.33 8 14.5 8zm3 4c-.83 0-1.5-.67-1.5-1.5S16.67 9 17.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z" />
         </svg>
       </button>
@@ -987,11 +987,11 @@ export default function Galaxy({ refSlug }: GalaxyProps) {
       {/* Make yours button */}
       <button
         onClick={() => setBuilderOpen(true)}
-        className="fixed bottom-9 max-sm:bottom-6 left-1/2 -translate-x-1/2 z-20 text-[13px] max-sm:text-xs font-normal tracking-[2px] lowercase text-white cursor-pointer transition-all duration-[400ms]"
+        className="fixed z-20 left-1/2 -translate-x-1/2 text-xs sm:text-[13px] font-normal tracking-[2px] lowercase text-white cursor-pointer transition-all duration-[400ms] active:scale-95 bottom-5 sm:bottom-9"
         style={{
-          background: 'rgba(255,255,255,0.05)',
-          border: '1px solid rgba(255,255,255,0.07)',
-          padding: '14px 40px',
+          background: 'rgba(255,255,255,0.06)',
+          border: '1px solid rgba(255,255,255,0.08)',
+          padding: '13px 36px',
           borderRadius: '40px',
           backdropFilter: 'blur(20px)',
           fontFamily: "'DM Sans', sans-serif",
@@ -1001,8 +1001,8 @@ export default function Galaxy({ refSlug }: GalaxyProps) {
           e.currentTarget.style.borderColor = 'rgba(255,255,255,0.14)';
         }}
         onMouseLeave={(e) => {
-          e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
-          e.currentTarget.style.borderColor = 'rgba(255,255,255,0.07)';
+          e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
+          e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)';
         }}
       >
         make yours
