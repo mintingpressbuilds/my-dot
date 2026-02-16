@@ -52,9 +52,11 @@ export async function POST(req: Request) {
           </div>
         `,
       });
+      return NextResponse.json({ message: 'Magic link sent' });
     }
 
-    return NextResponse.json({ message: 'Magic link sent' });
+    // No email provider configured — return verify URL for direct claim
+    return NextResponse.json({ message: 'Magic link sent', verifyUrl });
   } catch {
     return NextResponse.json({ message: 'Internal server error' }, { status: 500 });
   }
