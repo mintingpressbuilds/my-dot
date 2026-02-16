@@ -104,6 +104,13 @@ export default function Galaxy({ refSlug, initialDots, mapMode }: GalaxyProps) {
   const trailHistoryRef = useRef<Float32Array[]>([]);
   const trailMeshRef = useRef<THREE.LineSegments | null>(null);
 
+  // zoom-dependent labels — pool of 30
+  const LABEL_POOL_SIZE = 30;
+  const labelPoolRef = useRef<HTMLDivElement[]>([]);
+
+  // heartbeat pulse meshes
+  const heartbeatMeshesRef = useRef<THREE.Mesh[]>([]);
+
   // shake
   const lastShakeTimeRef = useRef(0);
 
@@ -178,22 +185,22 @@ export default function Galaxy({ refSlug, initialDots, mapMode }: GalaxyProps) {
       });
     });
 
-    // regular connections — brighter (0.15)
+    // regular connections — subtle
     const regGeo = new THREE.BufferGeometry();
     regGeo.setAttribute('position', new THREE.Float32BufferAttribute(regPos, 3));
     regGeo.setAttribute('color', new THREE.Float32BufferAttribute(regCol, 3));
     lineSegRef.current = new THREE.LineSegments(regGeo, new THREE.LineBasicMaterial({
-      vertexColors: true, transparent: true, opacity: 0.15,
+      vertexColors: true, transparent: true, opacity: 0.06,
     }));
     scene.add(lineSegRef.current);
 
-    // mutual connections — brighter (0.25)
+    // mutual connections — slightly brighter
     if (mutPos.length > 0) {
       const mutGeo = new THREE.BufferGeometry();
       mutGeo.setAttribute('position', new THREE.Float32BufferAttribute(mutPos, 3));
       mutGeo.setAttribute('color', new THREE.Float32BufferAttribute(mutCol, 3));
       mutualLineSegRef.current = new THREE.LineSegments(mutGeo, new THREE.LineBasicMaterial({
-        vertexColors: true, transparent: true, opacity: 0.25,
+        vertexColors: true, transparent: true, opacity: 0.12,
       }));
       scene.add(mutualLineSegRef.current);
     }
@@ -486,6 +493,21 @@ export default function Galaxy({ refSlug, initialDots, mapMode }: GalaxyProps) {
       });
       ringPointsRef.current = new THREE.Points(ringGeo, ringMat);
       scene.add(ringPointsRef.current);
+
+      // heartbeat pulse — expanding wireframe sphere
+      const heartGeo = new THREE.SphereGeometry(1, 24, 16);
+      const heartMat = new THREE.MeshBasicMaterial({
+        color: new THREE.Color(newDot.color),
+        wireframe: true,
+        transparent: true,
+        opacity: 0.4,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      });
+      const heartMesh = new THREE.Mesh(heartGeo, heartMat);
+      heartMesh.position.set(newDot.hx, newDot.hy, newDot.hz);
+      scene.add(heartMesh);
+      heartbeatMeshesRef.current.push(heartMesh);
     }
   }, [physics.dotsRef, rebuildGeometry, triggerGalaxyPulse, showMode]);
 
@@ -883,6 +905,86 @@ export default function Galaxy({ refSlug, initialDots, mapMode }: GalaxyProps) {
         meLabelRef.current.style.left = sx + 'px';
         meLabelRef.current.style.top = (sy - 20) + 'px';
         meLabelRef.current.style.display = showLabel ? 'block' : 'none';
+      }
+
+      // zoom-dependent detail
+      const zoom = cam.zoomRef.current;
+      const showConnections = zoom < 200;
+      const showLabels = zoom < 120;
+
+      // fade connection lines based on zoom
+      if (lineSegRef.current) {
+        lineSegRef.current.visible = showConnections;
+        (lineSegRef.current.material as THREE.LineBasicMaterial).opacity = showConnections
+          ? Math.min((200 - zoom) / 80, 1) * 0.06
+          : 0;
+      }
+      if (mutualLineSegRef.current) {
+        mutualLineSegRef.current.visible = showConnections;
+        (mutualLineSegRef.current.material as THREE.LineBasicMaterial).opacity = showConnections
+          ? Math.min((200 - zoom) / 80, 1) * 0.12
+          : 0;
+      }
+
+      // position name labels on closest dots when zoomed in
+      const labels = labelPoolRef.current;
+      if (labels.length > 0) {
+        if (!showLabels) {
+          for (let l = 0; l < labels.length; l++) {
+            labels[l].style.display = 'none';
+          }
+        } else {
+          // find dots closest to camera, sorted by screen-z
+          const scored: { idx: number; sx: number; sy: number; sz: number }[] = [];
+          const projVec = new THREE.Vector3();
+          for (let i = 0; i < currentDots.length; i++) {
+            projVec.set(currentDots[i].px, currentDots[i].py, currentDots[i].pz);
+            projVec.project(camera);
+            if (projVec.z > 0 && projVec.z < 1) {
+              scored.push({
+                idx: i,
+                sx: (projVec.x * 0.5 + 0.5) * window.innerWidth,
+                sy: (-projVec.y * 0.5 + 0.5) * window.innerHeight,
+                sz: projVec.z,
+              });
+            }
+          }
+          scored.sort((a, b) => a.sz - b.sz);
+
+          const labelOpacity = Math.min((120 - zoom) / 60, 1) * 0.5;
+          const labelSize = zoom < 60 ? '10px' : '8px';
+          const limit = Math.min(scored.length, LABEL_POOL_SIZE);
+          for (let l = 0; l < labels.length; l++) {
+            if (l < limit) {
+              const s = scored[l];
+              const d = currentDots[s.idx];
+              labels[l].textContent = d.name;
+              labels[l].style.left = (s.sx + 8) + 'px';
+              labels[l].style.top = (s.sy - 4) + 'px';
+              labels[l].style.display = 'block';
+              labels[l].style.opacity = String(labelOpacity);
+              labels[l].style.fontSize = labelSize;
+              labels[l].style.color = d.color;
+            } else {
+              labels[l].style.display = 'none';
+            }
+          }
+        }
+      }
+
+      // heartbeat pulse meshes — animate and clean up
+      for (let h = heartbeatMeshesRef.current.length - 1; h >= 0; h--) {
+        const mesh = heartbeatMeshesRef.current[h];
+        const scale = mesh.scale.x + 0.8;
+        mesh.scale.set(scale, scale, scale);
+        const mat = mesh.material as THREE.MeshBasicMaterial;
+        mat.opacity *= 0.96;
+        if (mat.opacity < 0.01) {
+          scene.remove(mesh);
+          mesh.geometry.dispose();
+          mat.dispose();
+          heartbeatMeshesRef.current.splice(h, 1);
+        }
       }
 
       // gravity trails — shift history and build trail segments
@@ -1475,6 +1577,27 @@ export default function Galaxy({ refSlug, initialDots, mapMode }: GalaxyProps) {
           me
         </div>
       )}
+
+      {/* Zoom-dependent name label pool */}
+      <div className="fixed inset-0 z-[14] pointer-events-none overflow-hidden">
+        {Array.from({ length: LABEL_POOL_SIZE }).map((_, i) => (
+          <div
+            key={i}
+            ref={(el) => { if (el) labelPoolRef.current[i] = el; }}
+            style={{
+              position: 'absolute',
+              display: 'none',
+              fontSize: '8px',
+              fontWeight: 300,
+              letterSpacing: '1px',
+              fontFamily: "'DM Sans', sans-serif",
+              whiteSpace: 'nowrap',
+              textShadow: '0 1px 4px rgba(0,0,0,0.6)',
+              transition: 'opacity 0.3s',
+            }}
+          />
+        ))}
+      </div>
     </>
   );
 }
