@@ -111,6 +111,15 @@ export default function Galaxy({ refSlug, initialDots, mapMode }: GalaxyProps) {
   // heartbeat pulse meshes
   const heartbeatMeshesRef = useRef<THREE.Mesh[]>([]);
 
+  // aurora nebula clouds
+  const nebulaPointsRef = useRef<THREE.Points | null>(null);
+
+  // friend chain glow
+  const chainLineRef = useRef<THREE.Line | null>(null);
+  const chainFadeRef = useRef(0); // time when chain should be fully gone
+  const chainHopsRef = useRef(-1);
+  const chainLabelRef = useRef<HTMLDivElement>(null);
+
   // shake
   const lastShakeTimeRef = useRef(0);
 
@@ -570,6 +579,41 @@ export default function Galaxy({ refSlug, initialDots, mapMode }: GalaxyProps) {
       sizeAttenuation: true,
     })));
 
+    // aurora nebula clouds — 40 large faint particles near center
+    const NEBULA_COUNT = 40;
+    const nebulaPos = new Float32Array(NEBULA_COUNT * 3);
+    const nebulaCols = new Float32Array(NEBULA_COUNT * 3);
+    const nebulaSizes = new Float32Array(NEBULA_COUNT);
+    const nebulaColors = [0x4466aa, 0x6644aa, 0x44aa88, 0xaa4466, 0x4488aa, 0x8844aa];
+    for (let i = 0; i < NEBULA_COUNT; i++) {
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      const r = 15 + Math.random() * 60;
+      nebulaPos[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+      nebulaPos[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+      nebulaPos[i * 3 + 2] = r * Math.cos(phi);
+      const nc = new THREE.Color(nebulaColors[i % nebulaColors.length]);
+      nebulaCols[i * 3] = nc.r;
+      nebulaCols[i * 3 + 1] = nc.g;
+      nebulaCols[i * 3 + 2] = nc.b;
+      nebulaSizes[i] = 30 + Math.random() * 40;
+    }
+    const nebulaGeo = new THREE.BufferGeometry();
+    nebulaGeo.setAttribute('position', new THREE.BufferAttribute(nebulaPos, 3));
+    nebulaGeo.setAttribute('color', new THREE.BufferAttribute(nebulaCols, 3));
+    const nebulaMat = new THREE.PointsMaterial({
+      size: 50,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.04,
+      sizeAttenuation: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const nebulaCloud = new THREE.Points(nebulaGeo, nebulaMat);
+    nebulaPointsRef.current = nebulaCloud;
+    scene.add(nebulaCloud);
+
     // generate or use provided dots
     const dots = initialDots
       ? initialDots.map((d, i) => ({
@@ -783,6 +827,12 @@ export default function Galaxy({ refSlug, initialDots, mapMode }: GalaxyProps) {
       const breathScale = 1.0 + breathCycle * 0.15;
       bloomPass.strength = 0.3 + breathCycle * 0.1;
 
+      // aurora nebula drift
+      if (nebulaPointsRef.current) {
+        nebulaPointsRef.current.rotation.y = t * 0.02;
+        nebulaPointsRef.current.rotation.x = Math.sin(t * 0.01) * 0.1;
+      }
+
       // galaxy pulse decay
       if (galaxyPulseRef.current > 0) {
         galaxyPulseRef.current *= 0.94;
@@ -987,6 +1037,45 @@ export default function Galaxy({ refSlug, initialDots, mapMode }: GalaxyProps) {
         }
       }
 
+      // friend chain glow — fade and update positions
+      if (chainLineRef.current && chainFadeRef.current > 0) {
+        const remaining = chainFadeRef.current - t;
+        if (remaining <= 0) {
+          scene.remove(chainLineRef.current);
+          chainLineRef.current.geometry.dispose();
+          (chainLineRef.current.material as THREE.Material).dispose();
+          chainLineRef.current = null;
+          chainFadeRef.current = 0;
+          chainHopsRef.current = -1;
+          if (chainLabelRef.current) chainLabelRef.current.style.display = 'none';
+        } else {
+          const opacity = Math.min(remaining / 2, 1) * 0.8;
+          (chainLineRef.current.material as THREE.LineBasicMaterial).opacity = opacity;
+          // update chain line positions to follow dots
+          const chainGeo = chainLineRef.current.geometry;
+          const chainPosAttr = chainGeo.attributes.position;
+          if (chainPosAttr) {
+            const arr = chainPosAttr.array as Float32Array;
+            const chainPath = (chainLineRef.current as THREE.Line & { _chainPath?: number[] })._chainPath;
+            if (chainPath) {
+              for (let ci = 0; ci < chainPath.length; ci++) {
+                const di = chainPath[ci];
+                if (di < currentDots.length) {
+                  arr[ci * 3] = currentDots[di].px;
+                  arr[ci * 3 + 1] = currentDots[di].py;
+                  arr[ci * 3 + 2] = currentDots[di].pz;
+                }
+              }
+              chainPosAttr.needsUpdate = true;
+            }
+          }
+          // fade chain label
+          if (chainLabelRef.current) {
+            chainLabelRef.current.style.opacity = String(Math.min(remaining / 2, 1));
+          }
+        }
+      }
+
       // gravity trails — shift history and build trail segments
       const th = trailHistoryRef.current;
       const tm = trailMeshRef.current;
@@ -1131,12 +1220,96 @@ export default function Galaxy({ refSlug, initialDots, mapMode }: GalaxyProps) {
       canvas.style.cursor = 'grab';
     };
 
+    // BFS pathfinding for friend chain
+    const bfsPath = (startIdx: number, endIdx: number): number[] | null => {
+      if (startIdx === endIdx) return [startIdx];
+      const allDots = physics.dotsRef.current;
+      const visited = new Set<number>([startIdx]);
+      const queue: { idx: number; path: number[] }[] = [{ idx: startIdx, path: [startIdx] }];
+      while (queue.length > 0) {
+        const { idx, path } = queue.shift()!;
+        const d = allDots[idx];
+        if (!d) continue;
+        // check all friends (bidirectional)
+        const neighbors = new Set<number>();
+        d.friends.forEach(fi => neighbors.add(fi));
+        // also check dots that have idx as friend
+        for (let j = 0; j < allDots.length; j++) {
+          if (allDots[j].friends.includes(idx)) neighbors.add(j);
+        }
+        for (const ni of neighbors) {
+          if (visited.has(ni) || ni >= allDots.length) continue;
+          const newPath = [...path, ni];
+          if (ni === endIdx) return newPath;
+          visited.add(ni);
+          queue.push({ idx: ni, path: newPath });
+        }
+      }
+      return null;
+    };
+
+    const showFriendChain = (targetIdx: number) => {
+      const myIdx = myDotIdxRef.current;
+      if (myIdx < 0 || myIdx === targetIdx) return;
+      const allDots = physics.dotsRef.current;
+      const path = bfsPath(myIdx, targetIdx);
+      if (!path || path.length < 2) return;
+
+      // remove existing chain
+      if (chainLineRef.current) {
+        scene.remove(chainLineRef.current);
+        chainLineRef.current.geometry.dispose();
+        (chainLineRef.current.material as THREE.Material).dispose();
+      }
+
+      const chainPositions = new Float32Array(path.length * 3);
+      const chainColors = new Float32Array(path.length * 3);
+      for (let i = 0; i < path.length; i++) {
+        const d = allDots[path[i]];
+        chainPositions[i * 3] = d.px;
+        chainPositions[i * 3 + 1] = d.py;
+        chainPositions[i * 3 + 2] = d.pz;
+        const col = new THREE.Color(d.color);
+        chainColors[i * 3] = col.r;
+        chainColors[i * 3 + 1] = col.g;
+        chainColors[i * 3 + 2] = col.b;
+      }
+      const chainGeo = new THREE.BufferGeometry();
+      chainGeo.setAttribute('position', new THREE.BufferAttribute(chainPositions, 3));
+      chainGeo.setAttribute('color', new THREE.BufferAttribute(chainColors, 3));
+      const chainMat = new THREE.LineBasicMaterial({
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.8,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        linewidth: 2,
+      });
+      const chainLine = new THREE.Line(chainGeo, chainMat);
+      (chainLine as THREE.Line & { _chainPath?: number[] })._chainPath = path;
+      chainLineRef.current = chainLine;
+      scene.add(chainLine);
+
+      // set fade timer (10 seconds)
+      chainFadeRef.current = clockRef.current.getElapsedTime() + 10;
+      chainHopsRef.current = path.length - 1;
+
+      // show hops label
+      if (chainLabelRef.current) {
+        chainLabelRef.current.textContent = `${path.length - 1} hop${path.length - 1 > 1 ? 's' : ''} away`;
+        chainLabelRef.current.style.display = 'block';
+        chainLabelRef.current.style.opacity = '1';
+      }
+      showMode(`${path.length - 1} hops`, 3000);
+    };
+
     const onClick = (e: MouseEvent) => {
       if (isDraggingRef.current) return;
       if (longPressFiredRef.current) { longPressFiredRef.current = false; return; }
       const idx = updateRaycast(e.clientX, e.clientY);
       if (idx >= 0) {
         triggerRipple(idx);
+        showFriendChain(idx);
         const dotCopy = { ...physics.dotsRef.current[idx] };
         setTimeout(() => setSelectedDot(dotCopy), 400);
       } else if (orbitLockedRef.current) {
@@ -1242,6 +1415,7 @@ export default function Galaxy({ refSlug, initialDots, mapMode }: GalaxyProps) {
         if (!longPressFiredRef.current) {
           const idx = grabIndexRef.current;
           triggerRipple(idx);
+          showFriendChain(idx);
           const dotCopy = { ...physics.dotsRef.current[idx] };
           setTimeout(() => setSelectedDot(dotCopy), 400);
         }
@@ -1313,6 +1487,14 @@ export default function Galaxy({ refSlug, initialDots, mapMode }: GalaxyProps) {
       if (trailMeshRef.current) {
         trailMeshRef.current.geometry.dispose();
         (trailMeshRef.current.material as THREE.Material).dispose();
+      }
+      if (chainLineRef.current) {
+        chainLineRef.current.geometry.dispose();
+        (chainLineRef.current.material as THREE.Material).dispose();
+      }
+      if (nebulaPointsRef.current) {
+        nebulaPointsRef.current.geometry.dispose();
+        (nebulaPointsRef.current.material as THREE.Material).dispose();
       }
       renderer.dispose();
       if (container.contains(renderer.domElement)) {
@@ -1598,6 +1780,24 @@ export default function Galaxy({ refSlug, initialDots, mapMode }: GalaxyProps) {
           />
         ))}
       </div>
+
+      {/* Friend chain hops label */}
+      <div
+        ref={chainLabelRef}
+        className="fixed z-[16] pointer-events-none"
+        style={{
+          display: 'none',
+          bottom: '140px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          fontSize: '11px',
+          letterSpacing: '2px',
+          color: 'rgba(255,255,255,0.4)',
+          fontWeight: 300,
+          fontFamily: "'DM Sans', sans-serif",
+          textShadow: '0 2px 10px rgba(0,0,0,0.5)',
+        }}
+      />
     </>
   );
 }
